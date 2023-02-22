@@ -6,8 +6,8 @@ void            execute(struct Program const*, int n, float const *uniform, floa
 
 int   splat(struct Builder*, float);
 int uniform(struct Builder*, int ix);
-int    load(struct Builder*, int ptr);
-void  store(struct Builder*, int ptr, int val);
+int    load(struct Builder*, int ix);
+void  store(struct Builder*, int ix, int val);
 
 int fadd(struct Builder*, int, int);
 int fsub(struct Builder*, int, int);

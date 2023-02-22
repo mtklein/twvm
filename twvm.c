@@ -1,10 +1,11 @@
 #include "twvm.h"
 #include <stdlib.h>
 
-#define vector __attribute__((vector_size(16)))
+#define K 4
+#define vector(T) T __attribute__((vector_size(sizeof(T) * K)))
 
 typedef struct Inst {
-    int (*fn)(struct Inst const *ip, float vector *v, int end, float const *uni, float *var[]);
+    int (*fn)(struct Inst const *ip, vector(float) *v, int end, float const *uni, float *var[]);
     int   x,y,ix;
     float imm;
 } Inst;
@@ -30,7 +31,7 @@ static int push_(Builder *b, Inst inst) {
 
 #define next __attribute__((musttail)) return ip[1].fn(ip+1,v+1, end,uni,var)
 #define stage(name) \
-    static int name##_(Inst const *ip, float vector *v, int end, float const *uni, float *var[])
+    static int name##_(Inst const *ip, vector(float) *v, int end, float const *uni, float *var[])
 
 stage(done) {
     (void)ip;
@@ -42,13 +43,13 @@ stage(done) {
 }
 
 stage(splat) {
-    *v = ((float vector){0} + 1.0f) * ip->imm;
+    *v = ( (vector(float)){0} + 1.0f ) * ip->imm;
     next;
 }
 int splat(Builder *b, float imm) { return push(b, .fn=splat_, .imm=imm); }
 
 stage(uniform) {
-    *v = ((float vector){0} + 1.0f) * uni[ip->ix];
+    *v = ( (vector(float)){0} + 1.0f ) * uni[ip->ix];
     next;
 }
 int uniform(Builder *b, int ix) { return push(b, .fn=uniform_, .ix=ix); }
@@ -56,19 +57,19 @@ int uniform(Builder *b, int ix) { return push(b, .fn=uniform_, .ix=ix); }
 
 stage(load) {
     float const *ptr = var[ip->ix];
-    if (end & 3) { __builtin_memcpy(v, ptr + end - 1,  4); }
-    else         { __builtin_memcpy(v, ptr + end - 4, 16); }
+    if (end & (K-1)) { __builtin_memcpy(v, ptr + end - 1,   sizeof(float)); }
+    else             { __builtin_memcpy(v, ptr + end - K, K*sizeof(float)); }
     next;
 }
-int load(Builder *b, int ptr) { return push(b, .fn=load_, .ix=ptr); }
+int load(Builder *b, int ix) { return push(b, .fn=load_, .ix=ix); }
 
 stage(store) {
     float *ptr = var[ip->ix];
-    if (end & 3) { __builtin_memcpy(ptr + end - 1, v+ip->y,  4); }
-    else         { __builtin_memcpy(ptr + end - 4, v+ip->y, 16); }
+    if (end & (K-1)) { __builtin_memcpy(ptr + end - 1, v+ip->y,   sizeof(float)); }
+    else             { __builtin_memcpy(ptr + end - K, v+ip->y, K*sizeof(float)); }
     next;
 }
-void store(Builder *b, int ptr, int val) { push(b, .fn=store_, .ix=ptr, .y=val); }
+void store(Builder *b, int ix, int val) { push(b, .fn=store_, .ix=ix, .y=val); }
 
 stage(fadd) { *v = v[ip->x] + v[ip->y]; next; }
 stage(fsub) { *v = v[ip->x] - v[ip->y]; next; }
@@ -108,8 +109,8 @@ Program* compile(Builder *b) {
 }
 
 void execute(Program const *p, int n, float const *uniform, float *varying[]) {
-    float vector *v = calloc((size_t)p->insts, sizeof *v);
-    for (int i = 0; i < n/4*4; i += 4) { p->inst->fn(p->inst,v,i+4,uniform,varying); }
-    for (int i = n/4*4; i < n; i += 1) { p->inst->fn(p->inst,v,i+1,uniform,varying); }
+    vector(float) *v = calloc((size_t)p->insts, sizeof *v);
+    for (int i = 0; i < n/K*K; i += K) { p->inst->fn(p->inst,v,i+K,uniform,varying); }
+    for (int i = n/K*K; i < n; i += 1) { p->inst->fn(p->inst,v,i+1,uniform,varying); }
     free(v);
 }
