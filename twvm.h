@@ -10,14 +10,13 @@
 
 struct Builder* builder(void);
 struct Program* compile(struct Builder*);
-void            execute(struct Program const*, int32_t const *uniform, void *varying[]);
+void            execute(struct Program const*, void *ptr[]);
 
 // Val represents a 32-bit value.
 typedef struct { int id; } Val;
 
-// Create from immediate bit pattern, load from a uniform or varying, or store to a varying.
-Val    splat(struct Builder*, int32_t imm);
-Val  uniform(struct Builder*, int uni);
+// Create from immediate bit pattern, load from a pointer, or store to a pointer.
+Val    splat(struct Builder*, int32_t);
 Val   load32(struct Builder*, int ptr, Val ix);
 void store32(struct Builder*, int ptr, Val ix, Val v, Val mask);
 

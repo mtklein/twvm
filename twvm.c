@@ -3,6 +3,8 @@
 #include <stddef.h>
 #include <stdlib.h>
 
+#define len(v) (int)(sizeof(v) / sizeof((v)[0]))
+
 // Snake, try to remember some of the basics of optimization:
 //   [x]  1) vectorization
 //   [ ]  2) strength reduction
@@ -10,21 +12,23 @@
 //   [ ]  4) common sub-expression elimination (and expression canonicalization)
 //   [ ]  5) loop-invariant hoisting
 
+#define vector __attribute__((vector_size(16)))
+
 typedef union {
-    int32_t  __attribute__((vector_size(16))) i;
-    uint32_t __attribute__((vector_size(16))) u;
-    float    __attribute__((vector_size(16))) f;
+    int32_t  vector i;
+    uint32_t vector u;
+    float    vector f;
 } Slot;
 
 struct PInst;
 
 typedef struct BInst {
-    void (*fn)(Slot[], int id, struct PInst const*, int32_t const *uni, void *var[]);
+    void (*fn)(Slot[], int id, struct PInst const*, void *ptr[]);
     int    x,y,z,imm;
 } BInst;
 
 typedef struct PInst {
-    void (*fn)(Slot[], int id, struct PInst const*, int32_t const *uni, void *var[]);
+    void (*fn)(Slot[], int id, struct PInst const*, void *ptr[]);
     int    x,y,z,imm;
 } PInst;
 
@@ -62,52 +66,72 @@ static Val push_(Builder *b, BInst inst) {
 #define push(b,f,...) push_(b, (BInst){.fn=f, __VA_ARGS__})
 
 #define fn(name) \
-    static void name##_(Slot v[], int id, PInst const *inst, int32_t const *uni, void *var[])
+    static void name##_(Slot v[], int id, PInst const *inst, void *ptr[])
 
-fn(  splat) { (void)uni; (void)var; v[id].i = (Slot){0}.i +     inst->imm ; }
-fn(uniform) {            (void)var; v[id].i = (Slot){0}.i + uni[inst->imm]; }
-
-Val   splat(Builder *b, int32_t imm) { return push(b,   splat_, .imm=imm); }
-Val uniform(Builder *b, int     uni) { return push(b, uniform_, .imm=uni); }
-
-// TODO: can we detect ix == uniform + iota and do a contiguous load?
-// TODO: does it make sense to merge uniform ptrs and varying ptrs
-//       and just detect a uniform ix as a signal to load a uniform?
-fn(gather32) {
-    (void)uni;
-    int32_t const *ptr = var[inst->imm];
-    Slot ix = v[inst->x];
-    v[id] = (Slot){{
-        ptr[ix.i[0]],
-        ptr[ix.i[1]],
-        ptr[ix.i[2]],
-        ptr[ix.i[3]],
-    }};
+fn(splat) {
+    (void)ptr;
+    v[id].i = (Slot){0}.i + inst->imm;
 }
-Val load32(Builder *b, int ptr, Val ix) { return push(b, gather32_, .imm=ptr, .x=ix.id); }
+Val splat(Builder *b, int32_t imm) { return push(b, splat_, .imm=imm); }
+
+fn(gather32) {
+    int32_t const *p = ptr[inst->imm];
+    int32_t vector ix = v[inst->x].i,
+                    r = {0};
+    #pragma GCC unroll
+    for (int i = 0; i < len(ix); i++) {
+        r[i] = p[ix[i]];
+    }
+    v[id].i = r;
+}
+Val load32(Builder *b, int ptr, Val ix) {
+    // TODO: ix == uniform        ~~> broadcast load marked as kind=uniform
+    // TODO: ix == uniform + iota ~~> contiguous load
+    return push(b, gather32_, .imm=ptr, .x=ix.id);
+}
+
+fn(scatter32) {
+    (void)id;
+    int32_t *p = ptr[inst->imm];
+    int32_t vector ix = v[inst->x].i,
+                    y = v[inst->y].i,
+                 mask = v[inst->z].i;
+    #pragma GCC unroll
+    for (int i = 0; i < len(ix); i++) {
+        if (mask[i]) {
+            p[ix[i]] = y[i];
+        }
+    }
+}
+void store32(Builder *b, int ptr, Val ix, Val y, Val mask) {
+    // TODO: assert no index conflict?
+    // TODO: mask == true                         ~~> unconditional scatter
+    // TODO: mask == true and ix = uniform + iota ~~> contiguous store
+    push(b, scatter32_, .imm=ptr, .x=ix.id, .y=y.id, .z=mask.id);
+}
 
 
-fn(   fadd) { (void)uni; (void)var; v[id].f =  v[inst->x].f +  v[inst->y].f; }
-fn(   fsub) { (void)uni; (void)var; v[id].f =  v[inst->x].f -  v[inst->y].f; }
-fn(   fmul) { (void)uni; (void)var; v[id].f =  v[inst->x].f *  v[inst->y].f; }
-fn(   fdiv) { (void)uni; (void)var; v[id].f =  v[inst->x].f /  v[inst->y].f; }
-fn(   iadd) { (void)uni; (void)var; v[id].i =  v[inst->x].i +  v[inst->y].i; }
-fn(   isub) { (void)uni; (void)var; v[id].i =  v[inst->x].i -  v[inst->y].i; }
-fn(   imul) { (void)uni; (void)var; v[id].i =  v[inst->x].i *  v[inst->y].i; }
-fn(    shl) { (void)uni; (void)var; v[id].i =  v[inst->x].i << v[inst->y].i; }
-fn(    shr) { (void)uni; (void)var; v[id].u =  v[inst->x].u >> v[inst->y].i; }
-fn(    sra) { (void)uni; (void)var; v[id].i =  v[inst->x].i >> v[inst->y].i; }
-fn(bit_and) { (void)uni; (void)var; v[id].i =  v[inst->x].i &  v[inst->y].i; }
-fn(bit_or ) { (void)uni; (void)var; v[id].i =  v[inst->x].i |  v[inst->y].i; }
-fn(bit_xor) { (void)uni; (void)var; v[id].i =  v[inst->x].i ^  v[inst->y].i; }
-fn(bit_not) { (void)uni; (void)var; v[id].i = ~v[inst->x].i                ; }
-fn(    ilt) { (void)uni; (void)var; v[id].i =  v[inst->x].i <  v[inst->y].i; }
-fn(    ieq) { (void)uni; (void)var; v[id].i =  v[inst->x].i == v[inst->y].i; }
-fn(    flt) { (void)uni; (void)var; v[id].i =  v[inst->x].f <  v[inst->y].f; }
-fn(    fle) { (void)uni; (void)var; v[id].i =  v[inst->x].f <= v[inst->y].f; }
+fn(   fadd) { (void)ptr; v[id].f =  v[inst->x].f +  v[inst->y].f; }
+fn(   fsub) { (void)ptr; v[id].f =  v[inst->x].f -  v[inst->y].f; }
+fn(   fmul) { (void)ptr; v[id].f =  v[inst->x].f *  v[inst->y].f; }
+fn(   fdiv) { (void)ptr; v[id].f =  v[inst->x].f /  v[inst->y].f; }
+fn(   iadd) { (void)ptr; v[id].i =  v[inst->x].i +  v[inst->y].i; }
+fn(   isub) { (void)ptr; v[id].i =  v[inst->x].i -  v[inst->y].i; }
+fn(   imul) { (void)ptr; v[id].i =  v[inst->x].i *  v[inst->y].i; }
+fn(    shl) { (void)ptr; v[id].i =  v[inst->x].i << v[inst->y].i; }
+fn(    shr) { (void)ptr; v[id].u =  v[inst->x].u >> v[inst->y].i; }
+fn(    sra) { (void)ptr; v[id].i =  v[inst->x].i >> v[inst->y].i; }
+fn(bit_and) { (void)ptr; v[id].i =  v[inst->x].i &  v[inst->y].i; }
+fn(bit_or ) { (void)ptr; v[id].i =  v[inst->x].i |  v[inst->y].i; }
+fn(bit_xor) { (void)ptr; v[id].i =  v[inst->x].i ^  v[inst->y].i; }
+fn(bit_not) { (void)ptr; v[id].i = ~v[inst->x].i                ; }
+fn(    ilt) { (void)ptr; v[id].i =  v[inst->x].i <  v[inst->y].i; }
+fn(    ieq) { (void)ptr; v[id].i =  v[inst->x].i == v[inst->y].i; }
+fn(    flt) { (void)ptr; v[id].i =  v[inst->x].f <  v[inst->y].f; }
+fn(    fle) { (void)ptr; v[id].i =  v[inst->x].f <= v[inst->y].f; }
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wfloat-equal"
-fn(    feq) { (void)uni; (void)var; v[id].i =  v[inst->x].f == v[inst->y].f; }
+fn(    feq) { (void)ptr; v[id].i =  v[inst->x].f == v[inst->y].f; }
 #pragma GCC diagnostic pop
 
 Val    fadd(Builder *b, Val x, Val y) { return push(b,    fadd_, .x=x.id, .y=y.id); }
