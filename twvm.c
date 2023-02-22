@@ -4,7 +4,7 @@
 #define vector __attribute__((vector_size(16)))
 
 typedef struct Inst {
-    void (*fn)(struct Inst const *ip, float vector *v, int end, float const *uni, float *var[]);
+    int (*fn)(struct Inst const *ip, float vector *v, int end, float const *uni, float *var[]);
     float imm;
     int   x,y,unused;
 } Inst;
@@ -28,9 +28,9 @@ static int push_(Builder *b, Inst inst) {
 }
 #define push(b,...) push_(b, (Inst){__VA_ARGS__})
 
-#define next ip[1].fn(ip+1,v+1, end,uni,var); return
+#define next __attribute__((musttail)) return ip[1].fn(ip+1,v+1, end,uni,var)
 #define stage(name) \
-    static void name##_(Inst const *ip, float vector *v, int end, float const *uni, float *var[])
+    static int name##_(Inst const *ip, float vector *v, int end, float const *uni, float *var[])
 
 stage(done) {
     (void)ip;
@@ -38,6 +38,7 @@ stage(done) {
     (void)end;
     (void)uni;
     (void)var;
+    return 0;
 }
 
 stage(splat) {
