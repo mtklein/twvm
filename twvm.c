@@ -92,7 +92,13 @@ Program* compile(Builder *b) {
 
     Program *p = calloc(1, sizeof *p + (size_t)b->insts * sizeof *b->inst);
     for (int i = 0; i < b->insts; i++) {
-        p->inst[p->insts++] = b->inst[i];
+        Inst inst = b->inst[i];
+        p->inst[p->insts++] = (Inst) {
+            .fn  = inst.fn,
+            .x   = inst.x ? inst.x-1 - i : 0,
+            .y   = inst.y ? inst.y-1 - i : 0,
+            .imm = inst.imm,
+        };
     }
     free(b->inst);
     free(b);
