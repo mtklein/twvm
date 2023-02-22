@@ -8,7 +8,7 @@ rule compile
     deps    = gcc
 
 rule link
-    command = $cc $in -o $out
+    command = $cc -Wl,-dead_strip $in -o $out
 
 rule run
     command = ./$in > $out
