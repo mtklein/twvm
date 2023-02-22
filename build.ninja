@@ -3,7 +3,7 @@ builddir = out
 cc = clang -Weverything -Xclang -nostdsysteminc
 
 rule compile
-    command = $cc -g -Os -MD -MF $out.d -c $in -o $out
+    command = $cc -g -Os -Werror -fdiagnostics-color -MD -MF $out.d -c $in -o $out
     depfile = $out.d
     deps    = gcc
 
