@@ -1,9 +1,11 @@
 builddir = out
 
-cc = clang -Weverything -Xclang -nostdsysteminc
+clang = clang -Weverything -Xclang -nostdsysteminc
+opt   = $clang -Os
+dbg   = $clang -O1 -fsanitize=address,integer,undefined
 
 rule compile
-    command = $cc -g -Os -Werror -fdiagnostics-color -MD -MF $out.d -c $in -o $out
+    command = $cc -g -Werror -fdiagnostics-color -MD -MF $out.d -c $in -o $out
     depfile = $out.d
     deps    = gcc
 
@@ -13,7 +15,18 @@ rule link
 rule run
     command = ./$in > $out
 
-build out/twvm.o:  compile twvm.c
-build out/test.o:  compile test.c
-build out/test:    link out/test.o out/twvm.o
-build out/test.ok: run out/test
+build out/opt/twvm.o:  compile twvm.c
+    cc = $opt
+build out/opt/test.o:  compile test.c
+    cc = $opt
+build out/opt/test:    link out/opt/test.o out/opt/twvm.o
+    cc = $opt
+build out/opt/test.ok: run out/opt/test
+
+build out/dbg/twvm.o:  compile twvm.c
+    cc = $dbg
+build out/dbg/test.o:  compile test.c
+    cc = $dbg
+build out/dbg/test:    link out/dbg/test.o out/dbg/twvm.o
+    cc = $dbg
+build out/dbg/test.ok: run out/dbg/test
