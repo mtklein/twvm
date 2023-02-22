@@ -1,0 +1,19 @@
+builddir = out
+
+cc = clang -Weverything -Xclang -nostdsysteminc
+
+rule compile
+    command = $cc -g -Os -MD -MF $out.d -c $in -o $out
+    depfile = $out.d
+    deps    = gcc
+
+rule link
+    command = $cc $in -o $out
+
+rule run
+    command = ./$in > $out
+
+build out/twvm.o:  compile twvm.c
+build out/test.o:  compile test.c
+build out/test:    link out/test.o out/twvm.o
+build out/test.ok: run out/test
