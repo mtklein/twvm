@@ -5,8 +5,8 @@
 
 typedef struct Inst {
     int (*fn)(struct Inst const *ip, float vector *v, int end, float const *uni, float *var[]);
+    int   x,y,ix;
     float imm;
-    int   x,y,unused;
 } Inst;
 
 typedef struct Builder {
@@ -48,27 +48,27 @@ stage(splat) {
 int splat(Builder *b, float imm) { return push(b, .fn=splat_, .imm=imm); }
 
 stage(uniform) {
-    *v = ((float vector){0} + 1.0f) * uni[ip->x];
+    *v = ((float vector){0} + 1.0f) * uni[ip->ix];
     next;
 }
-int uniform(Builder *b, int ix) { return push(b, .fn=uniform_, .x=ix); }
+int uniform(Builder *b, int ix) { return push(b, .fn=uniform_, .ix=ix); }
 
 
 stage(load) {
-    float const *ptr = var[ip->x];
+    float const *ptr = var[ip->ix];
     if (end & 3) { __builtin_memcpy(v, ptr + end - 1,  4); }
     else         { __builtin_memcpy(v, ptr + end - 4, 16); }
     next;
 }
-int load(Builder *b, int ptr) { return push(b, .fn=load_, .x=ptr); }
+int load(Builder *b, int ptr) { return push(b, .fn=load_, .ix=ptr); }
 
 stage(store) {
-    float *ptr = var[ip->x];
+    float *ptr = var[ip->ix];
     if (end & 3) { __builtin_memcpy(ptr + end - 1, v+ip->y,  4); }
     else         { __builtin_memcpy(ptr + end - 4, v+ip->y, 16); }
     next;
 }
-void store(Builder *b, int ptr, int val) { push(b, .fn=store_, .x=ptr, .y=val); }
+void store(Builder *b, int ptr, int val) { push(b, .fn=store_, .ix=ptr, .y=val); }
 
 stage(fadd) { *v = v[ip->x] + v[ip->y]; next; }
 stage(fsub) { *v = v[ip->x] - v[ip->y]; next; }
@@ -96,9 +96,10 @@ Program* compile(Builder *b) {
         Inst inst = b->inst[i];
         p->inst[p->insts++] = (Inst) {
             .fn  = inst.fn,
-            .x   = inst.x ? inst.x-1 - i : 0,
-            .y   = inst.y ? inst.y-1 - i : 0,
+            .x   = inst.x-1 - i,
+            .y   = inst.y-1 - i,
             .imm = inst.imm,
+            .ix  = inst.ix,
         };
     }
     free(b->inst);
