@@ -15,18 +15,23 @@ rule link
 rule run
     command = ./$in > $out
 
-build out/opt/twvm.o:  compile twvm.c
-    cc = $opt
-build out/opt/test.o:  compile test.c
-    cc = $opt
-build out/opt/test:    link out/opt/test.o out/opt/twvm.o
-    cc = $opt
-build out/opt/test.ok: run out/opt/test
+rule diff
+    command = diff $in > $out
 
-build out/dbg/twvm.o:  compile twvm.c
+build out/opt/twvm.o: compile twvm.c
+    cc = $opt
+build out/opt/test.o: compile test.c
+    cc = $opt
+build out/opt/test:   link out/opt/test.o out/opt/twvm.o
+    cc = $opt
+build test.opt: run out/opt/test
+
+build out/dbg/twvm.o: compile twvm.c
     cc = $dbg
-build out/dbg/test.o:  compile test.c
+build out/dbg/test.o: compile test.c
     cc = $dbg
-build out/dbg/test:    link out/dbg/test.o out/dbg/twvm.o
+build out/dbg/test:   link out/dbg/test.o out/dbg/twvm.o
     cc = $dbg
-build out/dbg/test.ok: run out/dbg/test
+build test.dbg: run out/dbg/test
+
+build out/ok: diff test.opt test.dbg
