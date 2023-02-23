@@ -14,6 +14,9 @@ int fsub(struct Builder*, int, int);
 int fmul(struct Builder*, int, int);
 int fdiv(struct Builder*, int, int);
 
+int feq(struct Builder*, int, int);
+int flt(struct Builder*, int, int);
+
 void mutate(struct Builder*, int*, int);
 
 // jump

@@ -1,37 +1,41 @@
 #include "twvm.h"
-#include <assert.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #define len(arr) (int)( sizeof(arr) / sizeof((arr)[0]) )
-#define assert_eq(x,y) assert(x<=y && y <= x)
 
-static void test_nothing(void) {
-    struct Builder *b = builder();
+
+static _Bool equiv(float x, float y) {
+    return (x <= y && y <= x)
+        || (x != x && y != y);
+}
+#define expect_equiv(x,y) \
+    if (!equiv(x,y)) dprintf(2, "%s=%g != %s=%g\n", #x,(double)x,#y,(double)y), __builtin_trap()
+
+static void verify_(struct Builder *b, int n,
+                    float const want[], float const *uniform, float *varying[]) {
     struct Program *p = compile(b);
-    execute(p, 0, NULL, NULL);
+    execute(p, n, uniform, varying);
+
+    float const *got = varying[0];
+    for (int i = 0; i < n; i++) {
+        expect_equiv(got[i], want[i]);
+    }
     free(p);
 }
+#define verify(b,want,uni,...) verify_(b,len(want),want,uni, (float*[]){__VA_ARGS__})
 
 static void test_triple(void) {
     struct Builder *b = builder();
     {
         int x = load(b, 0),
             y = fmul(b, x, splat(b, 3.0f));
-        store(b,1,y);
+        store(b,0,y);
     }
-    struct Program *p = compile(b);
 
-    float s[] = {1.0f,2.0f,3.0f,4.0f,5.0f,6.0f},
-          d[len(s)];
-    execute(p, len(s), NULL, (float*[]){s,d});
-
-    assert_eq(d[0],  3.0f);
-    assert_eq(d[1],  6.0f);
-    assert_eq(d[2],  9.0f);
-    assert_eq(d[3], 12.0f);
-    assert_eq(d[4], 15.0f);
-    assert_eq(d[5], 18.0f);
-    free(p);
+    float v0[] = {1,2,3, 4, 5, 6},
+        want[] = {3,6,9,12,15,18};
+    verify(b,want,NULL,v0);
 }
 
 static void test_mutate(void) {
@@ -41,23 +45,31 @@ static void test_mutate(void) {
         mutate(b, &x, fmul(b, x, splat(b, 3.0f)));
         store(b,0,x);
     }
-    struct Program *p = compile(b);
 
-    float f[] = {1.0f,2.0f,3.0f,4.0f,5.0f,6.0f};
-    execute(p, len(f), NULL, (float*[]){f});
+    float v0[] = {1,2,3, 4, 5, 6},
+        want[] = {3,6,9,12,15,18};
+    verify(b,want,NULL,v0);
+}
 
-    assert_eq(f[0],  3.0f);
-    assert_eq(f[1],  6.0f);
-    assert_eq(f[2],  9.0f);
-    assert_eq(f[3], 12.0f);
-    assert_eq(f[4], 15.0f);
-    assert_eq(f[5], 18.0f);
-    free(p);
+static void test_flt(void) {
+    struct Builder *b = builder();
+    {
+        int x = load(b, 0),
+            y = load(b, 1);
+        store(b,0, flt(b,x,y));
+    }
+
+    float const t = (union {int bits; float f;}){~0}.f;
+
+    float v0[] = {1,2,3,4,5,6},
+          v1[] = {4,4,4,4,4,4},
+        want[] = {t,t,t,0,0,0};
+    verify(b,want,NULL,v0,v1);
 }
 
 int main(void) {
-    test_nothing();
     test_triple();
     test_mutate();
+    test_flt();
     return 0;
 }

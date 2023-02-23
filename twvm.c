@@ -3,9 +3,10 @@
 
 #define K 4
 #define vector(T) T __attribute__((vector_size(sizeof(T) * K)))
+typedef vector(float) F32;
 
 typedef struct Inst {
-    int (*fn)(struct Inst const *ip, vector(float) *v, int end, float const *uni, float *var[]);
+    int (*fn)(struct Inst const *ip, F32 *v, int end, float const *uni, float *var[]);
     int   x,y,ix;
     float imm;
 } Inst;
@@ -31,7 +32,7 @@ static int push_(Builder *b, Inst inst) {
 
 #define next __attribute__((musttail)) return ip[1].fn(ip+1,v+1, end,uni,var)
 #define stage(name) \
-    static int name##_(Inst const *ip, vector(float) *v, int end, float const *uni, float *var[])
+    static int name##_(Inst const *ip, F32 *v, int end, float const *uni, float *var[])
 
 stage(done) {
     (void)ip;
@@ -43,13 +44,13 @@ stage(done) {
 }
 
 stage(splat) {
-    *v = ( (vector(float)){0} + 1.0f ) * ip->imm;
+    *v = ( (F32){0} + 1.0f ) * ip->imm;
     next;
 }
 int splat(Builder *b, float imm) { return push(b, .fn=splat_, .imm=imm); }
 
 stage(uniform) {
-    *v = ( (vector(float)){0} + 1.0f ) * uni[ip->ix];
+    *v = ( (F32){0} + 1.0f ) * uni[ip->ix];
     next;
 }
 int uniform(Builder *b, int ix) { return push(b, .fn=uniform_, .ix=ix); }
@@ -71,15 +72,24 @@ stage(store) {
 }
 void store(Builder *b, int ix, int val) { push(b, .fn=store_, .ix=ix, .y=val); }
 
-stage(fadd) { *v = v[ip->x] + v[ip->y]; next; }
-stage(fsub) { *v = v[ip->x] - v[ip->y]; next; }
-stage(fmul) { *v = v[ip->x] * v[ip->y]; next; }
-stage(fdiv) { *v = v[ip->x] / v[ip->y]; next; }
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wfloat-equal"
+
+stage(fadd) { *v =        v[ip->x] +  v[ip->y]  ; next; }
+stage(fsub) { *v =        v[ip->x] -  v[ip->y]  ; next; }
+stage(fmul) { *v =        v[ip->x] *  v[ip->y]  ; next; }
+stage(fdiv) { *v =        v[ip->x] /  v[ip->y]  ; next; }
+stage(feq ) { *v = (F32)( v[ip->x] == v[ip->y] ); next; }
+stage(flt ) { *v = (F32)( v[ip->x] <  v[ip->y] ); next; }
+
+#pragma GCC diagnostic pop
 
 int fadd(Builder *b, int x, int y) { return push(b, .fn=fadd_, .x=x, .y=y); }
 int fsub(Builder *b, int x, int y) { return push(b, .fn=fsub_, .x=x, .y=y); }
 int fmul(Builder *b, int x, int y) { return push(b, .fn=fmul_, .x=x, .y=y); }
 int fdiv(Builder *b, int x, int y) { return push(b, .fn=fdiv_, .x=x, .y=y); }
+int feq (Builder *b, int x, int y) { return push(b, .fn=feq_ , .x=x, .y=y); }
+int flt (Builder *b, int x, int y) { return push(b, .fn=flt_ , .x=x, .y=y); }
 
 stage(mutate) { v[ip->x] = v[ip->y]; next; }
 void mutate(Builder *b, int *x, int y) { push(b, .fn=mutate_, .x=*x, .y=y); }
@@ -109,7 +119,7 @@ Program* compile(Builder *b) {
 }
 
 void execute(Program const *p, int n, float const *uniform, float *varying[]) {
-    vector(float) *v = calloc((size_t)p->insts, sizeof *v);
+    F32 *v = calloc((size_t)p->insts, sizeof *v);
     for (int i = 0; i < n/K*K; i += K) { p->inst->fn(p->inst,v,i+K,uniform,varying); }
     for (int i = n/K*K; i < n; i += 1) { p->inst->fn(p->inst,v,i+1,uniform,varying); }
     free(v);
