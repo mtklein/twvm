@@ -26,7 +26,7 @@ static int push_(Builder *b, Inst inst) {
         b->inst = realloc(b->inst, (size_t)(b->insts ? b->insts * 2 : 1) * sizeof *b->inst);
     }
     b->inst[b->insts++] = inst;
-    return b->insts;
+    return b->insts;  // Builder / Val IDs are 1-indexed so 0 can indicate N/A.
 }
 #define push(b,...) push_(b, (Inst){__VA_ARGS__})
 
@@ -107,7 +107,7 @@ Program* compile(Builder *b) {
         Inst inst = b->inst[i];
         p->inst[p->insts++] = (Inst) {
             .fn  = inst.fn,
-            .x   = inst.x-1 - i,
+            .x   = inst.x-1 - i,  // -1 for 1-indexed -> 0-indexed, -i for 0-indexed -> relative.
             .y   = inst.y-1 - i,
             .imm = inst.imm,
             .ix  = inst.ix,
