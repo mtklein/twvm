@@ -17,6 +17,12 @@ int fdiv(struct Builder*, int, int);
 int feq(struct Builder*, int, int);
 int flt(struct Builder*, int, int);
 
+int bnot(struct Builder*, int);
+int band(struct Builder*, int,int);
+int bor (struct Builder*, int,int);
+int bxor(struct Builder*, int,int);
+int bsel(struct Builder*, int cond, int t, int f);
+
 void mutate(struct Builder*, int*, int);
 
 void jump(struct Builder*, int dst, int cond);

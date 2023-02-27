@@ -3,10 +3,14 @@
 
 #define K 4
 #define vector(T) T __attribute__((vector_size(sizeof(T) * K)))
-typedef vector(float) F32;
+
+typedef union {
+    vector(float) f;
+    vector(int)   i;
+} V32;
 
 typedef struct Inst {
-    int (*fn)(struct Inst const *ip, F32 *v, int end, float const *uni, float *var[]);
+    int (*fn)(struct Inst const *ip, V32 *v, int end, float const *uni, float *var[]);
     int   x,y,ix;
     float imm;
 } Inst;
@@ -26,13 +30,13 @@ static int push_(Builder *b, Inst inst) {
         b->inst = realloc(b->inst, (size_t)(b->insts ? b->insts * 2 : 1) * sizeof *b->inst);
     }
     b->inst[b->insts++] = inst;
-    return b->insts;  // Builder / Val IDs are 1-indexed so 0 can indicate N/A.
+    return b->insts;  // Builder IDs are 1-indexed so 0 can indicate N/A.
 }
 #define push(b,...) push_(b, (Inst){__VA_ARGS__})
 
 #define next __attribute__((musttail)) return ip[1].fn(ip+1,v+1, end,uni,var)
 #define stage(name) \
-    static int name##_(Inst const *ip, F32 *v, int end, float const *uni, float *var[])
+    static int name##_(Inst const *ip, V32 *v, int end, float const *uni, float *var[])
 
 stage(done) {
     (void)ip;
@@ -44,13 +48,13 @@ stage(done) {
 }
 
 stage(splat) {
-    *v = ( (F32){0} + 1.0f ) * ip->imm;
+    v->f = ( (vector(float)){0} + 1 ) * ip->imm;
     next;
 }
 int splat(Builder *b, float imm) { return push(b, .fn=splat_, .imm=imm); }
 
 stage(uniform) {
-    *v = ( (F32){0} + 1.0f ) * uni[ip->ix];
+    v->f = ( (vector(float)){0} + 1 ) * uni[ip->ix];
     next;
 }
 int uniform(Builder *b, int ix) { return push(b, .fn=uniform_, .ix=ix); }
@@ -75,12 +79,16 @@ void store(Builder *b, int ix, int val) { push(b, .fn=store_, .ix=ix, .y=val); }
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wfloat-equal"
 
-stage(fadd) { *v =        v[ip->x] +  v[ip->y]  ; next; }
-stage(fsub) { *v =        v[ip->x] -  v[ip->y]  ; next; }
-stage(fmul) { *v =        v[ip->x] *  v[ip->y]  ; next; }
-stage(fdiv) { *v =        v[ip->x] /  v[ip->y]  ; next; }
-stage(feq ) { *v = (F32)( v[ip->x] == v[ip->y] ); next; }
-stage(flt ) { *v = (F32)( v[ip->x] <  v[ip->y] ); next; }
+stage(fadd) { v->f =  v[ip->x].f +  v[ip->y].f; next; }
+stage(fsub) { v->f =  v[ip->x].f -  v[ip->y].f; next; }
+stage(fmul) { v->f =  v[ip->x].f *  v[ip->y].f; next; }
+stage(fdiv) { v->f =  v[ip->x].f /  v[ip->y].f; next; }
+stage(feq ) { v->i =  v[ip->x].f == v[ip->y].f; next; }
+stage(flt ) { v->i =  v[ip->x].f <  v[ip->y].f; next; }
+stage(bnot) { v->i = ~v[ip->x].i              ; next; }
+stage(band) { v->i =  v[ip->x].i &  v[ip->y].i; next; }
+stage(bor ) { v->i =  v[ip->x].i |  v[ip->y].i; next; }
+stage(bxor) { v->i =  v[ip->x].i ^  v[ip->y].i; next; }
 
 #pragma GCC diagnostic pop
 
@@ -90,12 +98,24 @@ int fmul(Builder *b, int x, int y) { return push(b, .fn=fmul_, .x=x, .y=y); }
 int fdiv(Builder *b, int x, int y) { return push(b, .fn=fdiv_, .x=x, .y=y); }
 int feq (Builder *b, int x, int y) { return push(b, .fn=feq_ , .x=x, .y=y); }
 int flt (Builder *b, int x, int y) { return push(b, .fn=flt_ , .x=x, .y=y); }
+int bnot(Builder *b, int x       ) { return push(b, .fn=bnot_, .x=x      ); }
+int band(Builder *b, int x, int y) { return push(b, .fn=band_, .x=x, .y=y); }
+int bor (Builder *b, int x, int y) { return push(b, .fn=bor_ , .x=x, .y=y); }
+int bxor(Builder *b, int x, int y) { return push(b, .fn=bxor_, .x=x, .y=y); }
 
-stage(mutate) { v[ip->x] = v[ip->y]; next; }
+int bsel(Builder *b, int cond, int t, int f) {
+    return bxor(b, f, band(b, cond
+                            , bxor(b, t,f)));
+}
+
+stage(mutate) {
+    v[ip->x] = v[ip->y];
+    next;
+}
 void mutate(Builder *b, int *x, int y) { push(b, .fn=mutate_, .x=*x, .y=y); }
 
 stage(jump) {
-    vector(int) const cond = (vector(int))v[ip->y];
+    vector(int) const cond = v[ip->y].i;
     int any = 0;
     for (int i = 0; i < K; i++) {
         any |= cond[i];
@@ -134,7 +154,7 @@ Program* compile(Builder *b) {
 }
 
 void execute(Program const *p, int n, float const *uniform, float *varying[]) {
-    F32 *v = calloc((size_t)p->insts, sizeof *v);
+    V32 *v = calloc((size_t)p->insts, sizeof *v);
     for (int i = 0; i < n/K*K; i += K) { p->inst->fn(p->inst,v,i+K,uniform,varying); }
     for (int i = n/K*K; i < n; i += 1) { p->inst->fn(p->inst,v,i+1,uniform,varying); }
     free(v);
