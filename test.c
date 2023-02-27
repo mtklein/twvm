@@ -69,9 +69,25 @@ static void test_mutate(void) {
     dump("mutate",b,len(v0),NULL,v0);
 }
 
+static void test_jump(void) {
+    struct Builder *b = builder();
+    {
+        int x = load(b, 0);
+
+        int y = fsub(b, x, splat(b, 1.0f));
+        mutate(b, &x, y);
+        jump(b, y, flt(b, splat(b, 0.0f), y));
+
+        store(b,0,y);
+    }
+    float v0[] = {1,2,3,4,5,6};
+    dump("jump",b,len(v0),NULL,v0);
+}
+
 int main(void) {
     test_splat();
     test_binops();
     test_mutate();
+    test_jump();
     return 0;
 }

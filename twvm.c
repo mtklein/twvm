@@ -94,6 +94,21 @@ int flt (Builder *b, int x, int y) { return push(b, .fn=flt_ , .x=x, .y=y); }
 stage(mutate) { v[ip->x] = v[ip->y]; next; }
 void mutate(Builder *b, int *x, int y) { push(b, .fn=mutate_, .x=*x, .y=y); }
 
+stage(jump) {
+    vector(int) const cond = (vector(int))v[ip->y];
+    int any = 0;
+    for (int i = 0; i < K; i++) {
+        any |= cond[i];
+    }
+    if (any) {
+        int const jmp = ip->x - 1;
+        ip += jmp;
+        v  += jmp;
+    }
+    next;
+}
+void jump(Builder *b, int dst, int cond) { push(b, .fn=jump_, .x=dst, .y=cond); }
+
 typedef struct Program {
     int  insts,unused;
     Inst inst[];

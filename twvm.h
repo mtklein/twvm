@@ -19,4 +19,4 @@ int flt(struct Builder*, int, int);
 
 void mutate(struct Builder*, int*, int);
 
-// jump
+void jump(struct Builder*, int dst, int cond);
