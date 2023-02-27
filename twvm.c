@@ -4,6 +4,10 @@
 #define K 4
 #define vector(T) T __attribute__((vector_size(sizeof(T) * K)))
 
+// TODO:
+//   - dead code elimination (live -> kids are live, rewrite IDs)
+//   - invariant hoisting (max up kind from children, kind <= UNIFORM can hoist)
+
 typedef union {
     vector(float) f;
     vector(int)   i;
