@@ -40,7 +40,7 @@ static void test_splat(void) {
 static void test_binops(void) {
     int (*op[])(struct Builder*, int,int) = {
         fadd, fsub, fmul, fdiv,
-        feq, flt,
+        feq,fne, flt,fle, fgt,fge,
     };
 
     for (int i = 0; i < len(op); i++) {
@@ -74,7 +74,7 @@ static void test_jump(void) {
     {
         int x = load(b, 0);
         {
-            int cond = flt (b, splat(b,0.0f), x),
+            int cond = fgt (b, x, splat(b,0.0f)),
                 newx = bsel(b, cond
                              , fsub(b, x, splat(b,1.0f))
                              , x);
