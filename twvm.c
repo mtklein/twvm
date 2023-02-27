@@ -119,7 +119,7 @@ stage(mutate) {
     v[ip->x] = v[ip->y];
     next;
 }
-void mutate(Builder *b, int *x, int y) { push(b, .fn=mutate_, .x=*x, .y=y); }
+void mutate(Builder *b, int *var, int val) { push(b, .fn=mutate_, .x=*var, .y=val); }
 
 stage(jump) {
     vector(int) const cond = v[ip->y].i;
