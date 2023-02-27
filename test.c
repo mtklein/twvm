@@ -26,7 +26,7 @@ static void dump_(char const *func, struct Builder *b, int n, float const *uni, 
 }
 #define dump(func,b,n,uni,...) dump_(func, b,n,uni, (float*[]){__VA_ARGS__})
 
-static void test_triple(void) {
+static void test_splat(void) {
     struct Builder *b = builder();
     {
         int x = load(b, 0),
@@ -34,18 +34,7 @@ static void test_triple(void) {
         store(b,0,y);
     }
     float v0[] = {1,2,3,4,5,6};
-    dump("triple",b,len(v0),NULL,v0);
-}
-
-static void test_mutate(void) {
-    struct Builder *b = builder();
-    {
-        int x = load(b, 0);
-        mutate(b, &x, fmul(b, x, splat(b, 3.0f)));
-        store(b,0,x);
-    }
-    float v0[] = {1,2,3,4,5,6};
-    dump("mutate",b,len(v0),NULL,v0);
+    dump("splat",b,len(v0),NULL,v0);
 }
 
 static void test_binops(void) {
@@ -69,9 +58,20 @@ static void test_binops(void) {
     }
 }
 
+static void test_mutate(void) {
+    struct Builder *b = builder();
+    {
+        int x = load(b, 0);
+        mutate(b, &x, fmul(b, x, splat(b, 3.0f)));
+        store(b,0,x);
+    }
+    float v0[] = {1,2,3,4,5,6};
+    dump("mutate",b,len(v0),NULL,v0);
+}
+
 int main(void) {
-    test_triple();
-    test_mutate();
+    test_splat();
     test_binops();
+    test_mutate();
     return 0;
 }
