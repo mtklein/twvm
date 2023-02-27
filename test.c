@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+int internal_tests(void);
+
 #define len(arr) (int)( sizeof(arr) / sizeof((arr)[0]) )
 
 static void dump_(char const *func, struct Builder *b, int n, float const *uni, float *var[]) {
@@ -90,6 +92,9 @@ static void test_jump(void) {
 }
 
 int main(void) {
+    for (int rc = internal_tests(); rc;) {
+        return rc;
+    }
     test_fmad();
     test_binops();
     test_mutate();
