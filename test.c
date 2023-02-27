@@ -1,5 +1,4 @@
 #include "twvm.h"
-#include <dlfcn.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -38,10 +37,14 @@ static void test_fmad(void) {
 }
 
 static void test_binops(void) {
-    int (*op[])(struct Builder*, int,int) = {
-        fadd, fsub, fmul, fdiv,
-        feq, flt,fle, fgt,fge,
-        band, bor, bxor,
+    #define M(x) {x,#x}
+    struct {
+        int (*fn)(struct Builder*, int,int);
+        char const *name;
+    } op[] = {
+        M(fadd), M(fsub), M(fmul), M(fdiv),
+        M(feq), M(flt),M(fle), M(fgt),M(fge),
+        M(band), M(bor), M(bxor),
     };
 
     for (int i = 0; i < len(op); i++) {
@@ -49,13 +52,11 @@ static void test_binops(void) {
         {
             int x = load(b,0),
                 y = load(b,1);
-            store(b,0, op[i](b,x,y));
+            store(b,0, op[i].fn(b,x,y));
         }
         float v0[] = {1,2,3,4,5,6},
               v1[] = {4,4,4,4,4,4};
-        Dl_info info;
-        dladdr((void const*)op[i], &info);
-        dump(info.dli_sname,b,len(v0),NULL,v0,v1);
+        dump(op[i].name,b,len(v0),NULL,v0,v1);
     }
 }
 
