@@ -82,7 +82,6 @@ static void test_jump(void) {
             mutate(b, &x, newx);
             jump(b, cond, cond);
         }
-
         store(b,0,x);
     }
     float v0[] = {1,2,3,4,5,6};

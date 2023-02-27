@@ -111,8 +111,8 @@ int bor (Builder *b, int x, int y       ) { return push(b, .fn=bor_ , .x=x, .y=y
 int bxor(Builder *b, int x, int y       ) { return push(b, .fn=bxor_, .x=x, .y=y      ); }
 int bsel(Builder *b, int x, int y, int z) { return push(b, .fn=bsel_, .x=x, .y=y, .z=z); }
 
-int fgt(Builder *b, int x, int y) { return flt (b,y,x); }
-int fge(Builder *b, int x, int y) { return fle (b,y,x); }
+int fgt(Builder *b, int x, int y) { return flt(b,y,x); }
+int fge(Builder *b, int x, int y) { return fle(b,y,x); }
 
 stage(mutate) {
     v[ip->x] = v[ip->y];
