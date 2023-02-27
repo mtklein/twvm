@@ -174,29 +174,16 @@ typedef struct Program {
 Program* compile(Builder *b) {
     push(b, .fn=done_, .kind=LIVE);
 
-    int live = 0;
-    for (int i = b->insts; i --> 0;) {
-        BInst inst = b->inst[i];
-        if (inst.kind == LIVE) {
-            live++;
-            if (inst.x) { b->inst[inst.x-1].kind = LIVE; }
-            if (inst.y) { b->inst[inst.y-1].kind = LIVE; }
-            if (inst.z) { b->inst[inst.z-1].kind = LIVE; }
-        }
-    }
-
-    Program *p = calloc(1, sizeof *p + (size_t)live * sizeof *b->inst);
+    Program *p = calloc(1, sizeof *p + (size_t)b->insts * sizeof *b->inst);
     for (int i = 0; i < b->insts; i++) {
         BInst inst = b->inst[i];
-        if (inst.kind == LIVE) {
-            p->inst[p->insts++] = (PInst) {
-                .fn  = inst.fn,
-                .x   = inst.x-1 - i,  // 1-indexed Builder IDs -> relative offsets
-                .y   = inst.y-1 - i,
-                .z   = inst.z-1 - i,
-                .ix  = inst.ix,
-            };
-        }
+        p->inst[p->insts++] = (PInst) {
+            .fn  = inst.fn,
+            .x   = inst.x-1 - i,  // 1-indexed Builder IDs -> relative offsets
+            .y   = inst.y-1 - i,
+            .z   = inst.z-1 - i,
+            .ix  = inst.ix,
+        };
     }
     drop(b);
     return p;
@@ -220,20 +207,6 @@ int internal_tests(void) {
             rc = 1;
         }
         drop(b);
-    }
-    {  // rc=2 dead-code elimination
-        Builder *b = builder();
-        {
-            int live = splat(b, 2.0f),
-                dead = splat(b, 4.0f);
-            (void)dead;
-            store(b,0,live);
-        }
-        Program *p = compile(b);
-        if (p->insts != 3) {
-            rc = 2;
-        }
-        free(p);
     }
     return rc;
 }
