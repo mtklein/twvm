@@ -79,17 +79,18 @@ void store(Builder *b, int ix, int val) { push(b, .fn=store_, .ix=ix, .y=val); }
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wfloat-equal"
 
-stage(fadd) { v->f =  v[ip->x].f +  v[ip->y].f; next; }
-stage(fsub) { v->f =  v[ip->x].f -  v[ip->y].f; next; }
-stage(fmul) { v->f =  v[ip->x].f *  v[ip->y].f; next; }
-stage(fdiv) { v->f =  v[ip->x].f /  v[ip->y].f; next; }
-stage(feq ) { v->i =  v[ip->x].f == v[ip->y].f; next; }
-stage(flt ) { v->i =  v[ip->x].f <  v[ip->y].f; next; }
-stage(fle ) { v->i =  v[ip->x].f <= v[ip->y].f; next; }
-stage(bnot) { v->i = ~v[ip->x].i              ; next; }
-stage(band) { v->i =  v[ip->x].i &  v[ip->y].i; next; }
-stage(bor ) { v->i =  v[ip->x].i |  v[ip->y].i; next; }
-stage(bxor) { v->i =  v[ip->x].i ^  v[ip->y].i; next; }
+stage(fadd) { v->f =  v[ip->x].f +  v[ip->y].f             ; next; }
+stage(fsub) { v->f =  v[ip->x].f -  v[ip->y].f             ; next; }
+stage(fmul) { v->f =  v[ip->x].f *  v[ip->y].f             ; next; }
+stage(fdiv) { v->f =  v[ip->x].f /  v[ip->y].f             ; next; }
+stage(fmad) { v->f =  v[ip->x].f *  v[ip->y].f + v[ip->z].f; next; }
+stage(feq ) { v->i =  v[ip->x].f == v[ip->y].f             ; next; }
+stage(flt ) { v->i =  v[ip->x].f <  v[ip->y].f             ; next; }
+stage(fle ) { v->i =  v[ip->x].f <= v[ip->y].f             ; next; }
+stage(bnot) { v->i = ~v[ip->x].i                           ; next; }
+stage(band) { v->i =  v[ip->x].i &  v[ip->y].i             ; next; }
+stage(bor ) { v->i =  v[ip->x].i |  v[ip->y].i             ; next; }
+stage(bxor) { v->i =  v[ip->x].i ^  v[ip->y].i             ; next; }
 stage(bsel) {
     v->i = ( v[ip->x].i & v[ip->y].i)
          | (~v[ip->x].i & v[ip->z].i);
@@ -98,19 +99,19 @@ stage(bsel) {
 
 #pragma GCC diagnostic pop
 
-int fadd(Builder *b, int x, int y) { return push(b, .fn=fadd_, .x=x, .y=y); }
-int fsub(Builder *b, int x, int y) { return push(b, .fn=fsub_, .x=x, .y=y); }
-int fmul(Builder *b, int x, int y) { return push(b, .fn=fmul_, .x=x, .y=y); }
-int fdiv(Builder *b, int x, int y) { return push(b, .fn=fdiv_, .x=x, .y=y); }
-int feq (Builder *b, int x, int y) { return push(b, .fn=feq_ , .x=x, .y=y); }
-int flt (Builder *b, int x, int y) { return push(b, .fn=flt_ , .x=x, .y=y); }
-int fle (Builder *b, int x, int y) { return push(b, .fn=fle_ , .x=x, .y=y); }
-int bnot(Builder *b, int x       ) { return push(b, .fn=bnot_, .x=x      ); }
-int band(Builder *b, int x, int y) { return push(b, .fn=band_, .x=x, .y=y); }
-int bor (Builder *b, int x, int y) { return push(b, .fn=bor_ , .x=x, .y=y); }
-int bxor(Builder *b, int x, int y) { return push(b, .fn=bxor_, .x=x, .y=y); }
-
-int bsel(Builder *b, int cond, int t, int f) { return push(b, .fn=bsel_, .x=cond, .y=t, .z=f); }
+int fadd(Builder *b, int x, int y       ) { return push(b, .fn=fadd_, .x=x, .y=y      ); }
+int fsub(Builder *b, int x, int y       ) { return push(b, .fn=fsub_, .x=x, .y=y      ); }
+int fmul(Builder *b, int x, int y       ) { return push(b, .fn=fmul_, .x=x, .y=y      ); }
+int fdiv(Builder *b, int x, int y       ) { return push(b, .fn=fdiv_, .x=x, .y=y      ); }
+int fmad(Builder *b, int x, int y, int z) { return push(b, .fn=fmad_, .x=x, .y=y, .z=z); }
+int feq (Builder *b, int x, int y       ) { return push(b, .fn=feq_ , .x=x, .y=y      ); }
+int flt (Builder *b, int x, int y       ) { return push(b, .fn=flt_ , .x=x, .y=y      ); }
+int fle (Builder *b, int x, int y       ) { return push(b, .fn=fle_ , .x=x, .y=y      ); }
+int bnot(Builder *b, int x              ) { return push(b, .fn=bnot_, .x=x            ); }
+int band(Builder *b, int x, int y       ) { return push(b, .fn=band_, .x=x, .y=y      ); }
+int bor (Builder *b, int x, int y       ) { return push(b, .fn=bor_ , .x=x, .y=y      ); }
+int bxor(Builder *b, int x, int y       ) { return push(b, .fn=bxor_, .x=x, .y=y      ); }
+int bsel(Builder *b, int x, int y, int z) { return push(b, .fn=bsel_, .x=x, .y=y, .z=z); }
 
 int fgt(Builder *b, int x, int y) { return flt (b,y,x); }
 int fge(Builder *b, int x, int y) { return fle (b,y,x); }
