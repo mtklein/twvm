@@ -30,7 +30,7 @@ static void test_splat(void) {
     struct Builder *b = builder();
     {
         int x = load(b, 0),
-            y = fmul(b, x, splat(b, 3.0f));
+            y = fmul(b, x, splat(b,3.0f));
         store(b,0,y);
     }
     float v0[] = {1,2,3,4,5,6};
@@ -62,7 +62,7 @@ static void test_mutate(void) {
     struct Builder *b = builder();
     {
         int x = load(b, 0);
-        mutate(b, &x, fmul(b, x, splat(b, 3.0f)));
+        mutate(b, &x, fmul(b, x, splat(b,3.0f)));
         store(b,0,x);
     }
     float v0[] = {1,2,3,4,5,6};
@@ -73,12 +73,16 @@ static void test_jump(void) {
     struct Builder *b = builder();
     {
         int x = load(b, 0);
+        {
+            int cond = flt (b, splat(b,0.0f), x),
+                newx = bsel(b, cond
+                             , fsub(b, x, splat(b,1.0f))
+                             , x);
+            mutate(b, &x, newx);
+            jump(b, cond, cond);
+        }
 
-        int y = fsub(b, x, splat(b, 1.0f));
-        mutate(b, &x, y);
-        jump(b, y, flt(b, splat(b, 0.0f), y));
-
-        store(b,0,y);
+        store(b,0,x);
     }
     float v0[] = {1,2,3,4,5,6};
     dump("jump",b,len(v0),NULL,v0);
