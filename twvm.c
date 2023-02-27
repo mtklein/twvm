@@ -11,8 +11,8 @@ typedef union {
 
 typedef struct Inst {
     int (*fn)(struct Inst const *ip, V32 *v, int end, float const *uni, float *var[]);
-    int   x,y,ix;
-    float imm;
+    int   x,y,z;
+    union { int ix; float imm; };
 } Inst;
 
 typedef struct Builder {
@@ -90,6 +90,11 @@ stage(bnot) { v->i = ~v[ip->x].i              ; next; }
 stage(band) { v->i =  v[ip->x].i &  v[ip->y].i; next; }
 stage(bor ) { v->i =  v[ip->x].i |  v[ip->y].i; next; }
 stage(bxor) { v->i =  v[ip->x].i ^  v[ip->y].i; next; }
+stage(bsel) {
+    v->i = ( v[ip->x].i & v[ip->y].i)
+         | (~v[ip->x].i & v[ip->z].i);
+    next;
+}
 
 #pragma GCC diagnostic pop
 
@@ -105,14 +110,11 @@ int band(Builder *b, int x, int y) { return push(b, .fn=band_, .x=x, .y=y); }
 int bor (Builder *b, int x, int y) { return push(b, .fn=bor_ , .x=x, .y=y); }
 int bxor(Builder *b, int x, int y) { return push(b, .fn=bxor_, .x=x, .y=y); }
 
+int bsel(Builder *b, int cond, int t, int f) { return push(b, .fn=bsel_, .x=cond, .y=t, .z=f); }
+
 int fne(Builder *b, int x, int y) { return bnot(b,feq(b,x,y)); }
 int fgt(Builder *b, int x, int y) { return flt (b,y,x); }
 int fge(Builder *b, int x, int y) { return fle (b,y,x); }
-
-int bsel(Builder *b, int cond, int t, int f) {
-    return bxor(b, f, band(b, cond
-                            , bxor(b, t,f)));
-}
 
 stage(mutate) {
     v[ip->x] = v[ip->y];
@@ -150,7 +152,7 @@ Program* compile(Builder *b) {
             .fn  = inst.fn,
             .x   = inst.x-1 - i,  // -1 for 1-indexed -> 0-indexed, -i for 0-indexed -> relative.
             .y   = inst.y-1 - i,
-            .imm = inst.imm,
+            .z   = inst.z-1 - i,
             .ix  = inst.ix,
         };
     }
