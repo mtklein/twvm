@@ -40,7 +40,7 @@ static void test_splat(void) {
 static void test_binops(void) {
     int (*op[])(struct Builder*, int,int) = {
         fadd, fsub, fmul, fdiv,
-        feq,fne, flt,fle, fgt,fge,
+        feq, flt,fle, fgt,fge,
     };
 
     for (int i = 0; i < len(op); i++) {

@@ -112,7 +112,6 @@ int bxor(Builder *b, int x, int y) { return push(b, .fn=bxor_, .x=x, .y=y); }
 
 int bsel(Builder *b, int cond, int t, int f) { return push(b, .fn=bsel_, .x=cond, .y=t, .z=f); }
 
-int fne(Builder *b, int x, int y) { return bnot(b,feq(b,x,y)); }
 int fgt(Builder *b, int x, int y) { return flt (b,y,x); }
 int fge(Builder *b, int x, int y) { return fle (b,y,x); }
 
