@@ -174,16 +174,18 @@ typedef struct Program {
 Program* compile(Builder *b) {
     push(b, .fn=done_, .kind=LIVE);
 
+    int live = 0;
     for (int i = b->insts; i --> 0;) {
         BInst inst = b->inst[i];
         if (inst.kind == LIVE) {
+            live++;
             if (inst.x) { b->inst[inst.x-1].kind = LIVE; }
             if (inst.y) { b->inst[inst.y-1].kind = LIVE; }
             if (inst.z) { b->inst[inst.z-1].kind = LIVE; }
         }
     }
 
-    Program *p = calloc(1, sizeof *p + (size_t)b->insts * sizeof *b->inst);
+    Program *p = calloc(1, sizeof *p + (size_t)live * sizeof *b->inst);
     for (int i = 0; i < b->insts; i++) {
         BInst inst = b->inst[i];
         if (inst.kind == LIVE) {
