@@ -15,7 +15,7 @@ typedef struct PInst {
     union { int ix; float imm; };
 } PInst;
 
-typedef enum { MATH,CONST,UNIFORM,VARYING,EFFECT } Kind;
+typedef enum { MATH,CONST,UNIFORM,VARYING,LIVE } Kind;
 
 typedef struct BInst {
     int (*fn)(struct PInst const *ip, V32 *v, int end, float const *uni, float *var[]);
@@ -105,7 +105,7 @@ stage(store) {
     else             { __builtin_memcpy(ptr + end - K, v+ip->y, K*sizeof(float)); }
     next;
 }
-void store(Builder *b, int ix, int val) { push(b, .fn=store_, .ix=ix, .y=val, .kind=EFFECT); }
+void store(Builder *b, int ix, int val) { push(b, .fn=store_, .ix=ix, .y=val, .kind=LIVE); }
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wfloat-equal"
@@ -149,7 +149,7 @@ stage(mutate) {
     v[ip->x] = v[ip->y];
     next;
 }
-void mutate(Builder *b, int *var, int val) { push(b, .fn=mutate_, .x=*var, .y=val, .kind=EFFECT); }
+void mutate(Builder *b, int *var, int val) { push(b, .fn=mutate_, .x=*var, .y=val, .kind=LIVE); }
 
 stage(jump) {
     vector(int) const cond = v[ip->y].i;
@@ -164,7 +164,7 @@ stage(jump) {
     }
     next;
 }
-void jump(Builder *b, int dst, int cond) { push(b, .fn=jump_, .x=dst, .y=cond, .kind=EFFECT); }
+void jump(Builder *b, int dst, int cond) { push(b, .fn=jump_, .x=dst, .y=cond, .kind=LIVE); }
 
 typedef struct Program {
     int   insts,unused;
@@ -172,18 +172,29 @@ typedef struct Program {
 } Program;
 
 Program* compile(Builder *b) {
-    push(b, .fn=done_, .kind=EFFECT);
+    push(b, .fn=done_, .kind=LIVE);
+
+    for (int i = b->insts; i --> 0;) {
+        BInst inst = b->inst[i];
+        if (inst.kind == LIVE) {
+            if (inst.x) { b->inst[inst.x-1].kind = LIVE; }
+            if (inst.y) { b->inst[inst.y-1].kind = LIVE; }
+            if (inst.z) { b->inst[inst.z-1].kind = LIVE; }
+        }
+    }
 
     Program *p = calloc(1, sizeof *p + (size_t)b->insts * sizeof *b->inst);
     for (int i = 0; i < b->insts; i++) {
         BInst inst = b->inst[i];
-        p->inst[p->insts++] = (PInst) {
-            .fn  = inst.fn,
-            .x   = inst.x-1 - i,  // -1 for 1-indexed -> 0-indexed, -i for 0-indexed -> relative.
-            .y   = inst.y-1 - i,
-            .z   = inst.z-1 - i,
-            .ix  = inst.ix,
-        };
+        if (inst.kind == LIVE) {
+            p->inst[p->insts++] = (PInst) {
+                .fn  = inst.fn,
+                .x   = inst.x-1 - i,  // 1-indexed Builder IDs -> relative offsets
+                .y   = inst.y-1 - i,
+                .z   = inst.z-1 - i,
+                .ix  = inst.ix,
+            };
+        }
     }
     drop(b);
     return p;
@@ -199,14 +210,28 @@ void execute(Program const *p, int n, float const *uniform, float *varying[]) {
 int internal_tests(void);
 int internal_tests(void) {
     int rc = 0;
-    {
-        struct Builder *b = builder();
+    {  // rc=1 constant propagation
+        Builder *b = builder();
         int x = splat(b, 2.0f),
             y = fmul (b, x,x);
         if (b->inst[y-1].fn != splat_) {
             rc = 1;
         }
         drop(b);
+    }
+    {  // rc=2 dead-code elimination
+        Builder *b = builder();
+        {
+            int live = splat(b, 2.0f),
+                dead = splat(b, 4.0f);
+            (void)dead;
+            store(b,0,live);
+        }
+        Program *p = compile(b);
+        if (p->insts != 3) {
+            rc = 2;
+        }
+        free(p);
     }
     return rc;
 }
