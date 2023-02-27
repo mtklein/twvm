@@ -21,7 +21,6 @@ int fle(struct Builder*, int,int);
 int fgt(struct Builder*, int,int);
 int fge(struct Builder*, int,int);
 
-int bnot(struct Builder*, int);
 int band(struct Builder*, int,int);
 int bor (struct Builder*, int,int);
 int bxor(struct Builder*, int,int);
