@@ -38,15 +38,6 @@ static int push_(Builder *b, Inst inst) {
 #define stage(name) \
     static int name##_(Inst const *ip, V32 *v, int end, float const *uni, float *var[])
 
-stage(done) {
-    (void)ip;
-    (void)v;
-    (void)end;
-    (void)uni;
-    (void)var;
-    return 0;
-}
-
 stage(splat) {
     v->f = ( (vector(float)){0} + 1 ) * ip->imm;
     next;
@@ -58,7 +49,6 @@ stage(uniform) {
     next;
 }
 int uniform(Builder *b, int ix) { return push(b, .fn=uniform_, .ix=ix); }
-
 
 stage(load) {
     float const *ptr = var[ip->ix];
@@ -79,17 +69,17 @@ void store(Builder *b, int ix, int val) { push(b, .fn=store_, .ix=ix, .y=val); }
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wfloat-equal"
 
-stage(fadd) { v->f =  v[ip->x].f +  v[ip->y].f             ; next; }
-stage(fsub) { v->f =  v[ip->x].f -  v[ip->y].f             ; next; }
-stage(fmul) { v->f =  v[ip->x].f *  v[ip->y].f             ; next; }
-stage(fdiv) { v->f =  v[ip->x].f /  v[ip->y].f             ; next; }
-stage(fmad) { v->f =  v[ip->x].f *  v[ip->y].f + v[ip->z].f; next; }
-stage(feq ) { v->i =  v[ip->x].f == v[ip->y].f             ; next; }
-stage(flt ) { v->i =  v[ip->x].f <  v[ip->y].f             ; next; }
-stage(fle ) { v->i =  v[ip->x].f <= v[ip->y].f             ; next; }
-stage(band) { v->i =  v[ip->x].i &  v[ip->y].i             ; next; }
-stage(bor ) { v->i =  v[ip->x].i |  v[ip->y].i             ; next; }
-stage(bxor) { v->i =  v[ip->x].i ^  v[ip->y].i             ; next; }
+stage(fadd) { v->f = v[ip->x].f +  v[ip->y].f             ; next; }
+stage(fsub) { v->f = v[ip->x].f -  v[ip->y].f             ; next; }
+stage(fmul) { v->f = v[ip->x].f *  v[ip->y].f             ; next; }
+stage(fdiv) { v->f = v[ip->x].f /  v[ip->y].f             ; next; }
+stage(fmad) { v->f = v[ip->x].f *  v[ip->y].f + v[ip->z].f; next; }
+stage(feq ) { v->i = v[ip->x].f == v[ip->y].f             ; next; }
+stage(flt ) { v->i = v[ip->x].f <  v[ip->y].f             ; next; }
+stage(fle ) { v->i = v[ip->x].f <= v[ip->y].f             ; next; }
+stage(band) { v->i = v[ip->x].i &  v[ip->y].i             ; next; }
+stage(bor ) { v->i = v[ip->x].i |  v[ip->y].i             ; next; }
+stage(bxor) { v->i = v[ip->x].i ^  v[ip->y].i             ; next; }
 stage(bsel) {
     v->i = ( v[ip->x].i & v[ip->y].i)
          | (~v[ip->x].i & v[ip->z].i);
@@ -140,6 +130,14 @@ typedef struct Program {
     Inst inst[];
 } Program;
 
+stage(done) {
+    (void)ip;
+    (void)v;
+    (void)end;
+    (void)uni;
+    (void)var;
+    return 0;
+}
 Program* compile(Builder *b) {
     push(b, .fn=done_);
 
