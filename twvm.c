@@ -81,6 +81,9 @@ static int constant_prop(Builder *b, BInst inst) {
     return 0;
 }
 
+// In cse_* functions, we use id=0 to indicate an empty Entry,
+// and maintain the invariant that there is always at least one empty Entry, except if b->cse=NULL.
+
 static int cse_lookup(Builder const *b, BInst inst, unsigned hash) {
     if (b->cse)
     for (unsigned mask=(unsigned)(b->cse_cap-1), i=hash&mask; b->cse[i].id; i = (i+1)&mask) {
@@ -125,13 +128,17 @@ static unsigned fnv1a(void const *v, size_t len) {
 }
 
 static int push_(Builder *b, BInst inst) {
+    // Constant folding: math on constants produces a constant.
     for (int id = constant_prop(b,inst); id;) { return id; }
 
     _Bool const insert_cse = inst.kind < VARYING && !inst.live;
+
+    // Max up each input's kind into this instruction.  Determines loop-invariant hoisting.
     if (inst.x && inst.kind < b->inst[inst.x-1].kind) { inst.kind = b->inst[inst.x-1].kind; }
     if (inst.y && inst.kind < b->inst[inst.y-1].kind) { inst.kind = b->inst[inst.y-1].kind; }
     if (inst.z && inst.kind < b->inst[inst.z-1].kind) { inst.kind = b->inst[inst.z-1].kind; }
 
+    // Common sub-expression elimination: have we seen this same instruction before?
     unsigned const hash = fnv1a(&inst, sizeof inst);
     for (int id = cse_lookup(b,inst,hash); id;) { return id; }
 
@@ -142,6 +149,9 @@ static int push_(Builder *b, BInst inst) {
     if (insert_cse) { cse_insert(b,hash,b->insts); }
     return b->insts;  // Builder IDs are 1-indexed so 0 can indicate N/A.
 }
+#define push(b,...) push_(b, (BInst){__VA_ARGS__})
+
+// When op(x,y)==op(y,x), use sort() instead of push() to canonicalize, allowing more CSE.
 static int sort_(Builder *b, BInst inst) {
     if (inst.x > inst.y) {
         int tmp = inst.y;
@@ -150,7 +160,6 @@ static int sort_(Builder *b, BInst inst) {
     }
     return push_(b,inst);
 }
-#define push(b,...) push_(b, (BInst){__VA_ARGS__})
 #define sort(b,...) sort_(b, (BInst){__VA_ARGS__})
 
 stage(splat) {
@@ -226,7 +235,7 @@ stage(mutate) {
 void mutate(Builder *b, int *var, int val) {
     push(b, .fn=mutate_, .x=*var, .y=val, .live=1);
 
-    // TODO: this is kind of a big hammer
+    // Forget about any previous CSE entries when one mutates.  (TODO: kind of a big hammer)
     __builtin_bzero(b->cse, (size_t)b->cse_cap * sizeof *b->cse);
     b->cse_len = 0;
 }
@@ -254,6 +263,7 @@ typedef struct Program {
 Program* compile(Builder *b) {
     push(b, .fn=done_, .kind=VARYING, .live=1);
 
+    // Dead code elimination: mark inputs to live instructions as live.
     int live = 0;
     for (BInst *inst = b->inst + b->insts; inst --> b->inst;) {
         if (inst->live) {
@@ -266,6 +276,7 @@ Program* compile(Builder *b) {
 
     Program *p = calloc(1, sizeof *p + (size_t)live * sizeof *b->inst);
 
+    // Loop-invariant hoisting: run all uniform instructions first (and once), loop on varying.
     for (int loop = 0; loop < 2; loop++) {
         if (loop) {
             p->loop = p->insts;
