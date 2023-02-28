@@ -4,9 +4,6 @@
 #define K 4
 #define vector(T) T __attribute__((vector_size(sizeof(T) * K)))
 
-// TODO:
-//   - invariant hoisting (max up kind from children, kind <= UNIFORM can hoist)
-
 typedef union {
     vector(float) f;
     vector(int)   i;
@@ -18,7 +15,7 @@ typedef struct PInst {
     union { int ix; float imm; };
 } PInst;
 
-typedef enum { MATH,CONST,UNIFORM,VARYING,LIVE } Kind;
+typedef enum { LIVE=1, MATH=0,CONST=2,UNIFORM=4,LOAD=6,EFFECT=8|LIVE } Kind;
 
 typedef struct BInst {
     int (*fn)(struct PInst const *ip, V32 *v, int end, float const *uni, float *var[]);
@@ -74,6 +71,10 @@ static int push_(Builder *b, BInst inst) {
         return splat(b, v[3].f[0]);
     }
 
+    if (inst.x && inst.kind < b->inst[inst.x-1].kind) { inst.kind = b->inst[inst.x-1].kind; }
+    if (inst.y && inst.kind < b->inst[inst.y-1].kind) { inst.kind = b->inst[inst.y-1].kind; }
+    if (inst.z && inst.kind < b->inst[inst.z-1].kind) { inst.kind = b->inst[inst.z-1].kind; }
+
     if ((b->insts & (b->insts-1)) == 0) {
         b->inst = realloc(b->inst, (size_t)(b->insts ? b->insts * 2 : 1) * sizeof *b->inst);
     }
@@ -100,7 +101,7 @@ stage(load) {
     else             { __builtin_memcpy(v, ptr + end - K, K*sizeof(float)); }
     next;
 }
-int load(Builder *b, int ix) { return push(b, .fn=load_, .ix=ix, .kind=VARYING); }
+int load(Builder *b, int ix) { return push(b, .fn=load_, .ix=ix, .kind=LOAD); }
 
 stage(store) {
     float *ptr = var[ip->ix];
@@ -108,7 +109,7 @@ stage(store) {
     else             { __builtin_memcpy(ptr + end - K, v+ip->y, K*sizeof(float)); }
     next;
 }
-void store(Builder *b, int ix, int val) { push(b, .fn=store_, .ix=ix, .y=val, .kind=LIVE); }
+void store(Builder *b, int ix, int val) { push(b, .fn=store_, .ix=ix, .y=val, .kind=EFFECT); }
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wfloat-equal"
@@ -152,7 +153,7 @@ stage(mutate) {
     v[ip->x] = v[ip->y];
     next;
 }
-void mutate(Builder *b, int *var, int val) { push(b, .fn=mutate_, .x=*var, .y=val, .kind=LIVE); }
+void mutate(Builder *b, int *var, int val) { push(b, .fn=mutate_, .x=*var, .y=val, .kind=EFFECT); }
 
 stage(jump) {
     vector(int) const cond = v[ip->y].i;
@@ -167,36 +168,44 @@ stage(jump) {
     }
     next;
 }
-void jump(Builder *b, int dst, int cond) { push(b, .fn=jump_, .x=dst, .y=cond, .kind=LIVE); }
+void jump(Builder *b, int dst, int cond) { push(b, .fn=jump_, .x=dst, .y=cond, .kind=EFFECT); }
+
+// TODO: are mutate and jump kinds too strict?  looping doesn't necessarily make things not-uniform.
 
 typedef struct Program {
-    int   insts,unused;
+    int   insts,loop;
     PInst inst[];
 } Program;
 
 Program* compile(Builder *b) {
-    push(b, .fn=done_, .kind=LIVE);
+    push(b, .fn=done_, .kind=EFFECT);
 
     int live = 0;
-    for (BInst const *inst = b->inst + b->insts; inst --> b->inst;) {
-        if (inst->kind == LIVE) {
+    for (BInst *inst = b->inst + b->insts; inst --> b->inst;) {
+        if (inst->kind & LIVE) {
             live++;
-            if (inst->x) { b->inst[inst->x-1].kind = LIVE; }
-            if (inst->y) { b->inst[inst->y-1].kind = LIVE; }
-            if (inst->z) { b->inst[inst->z-1].kind = LIVE; }
+            if (inst->x) { b->inst[inst->x-1].kind |= LIVE; }
+            if (inst->y) { b->inst[inst->y-1].kind |= LIVE; }
+            if (inst->z) { b->inst[inst->z-1].kind |= LIVE; }
         }
     }
 
     Program *p = calloc(1, sizeof *p + (size_t)live * sizeof *b->inst);
-    for (BInst *inst = b->inst; inst < b->inst + b->insts; inst++) {
-        if (inst->kind == LIVE) {
-            p->inst[inst->id = p->insts++] = (PInst) {
-                .fn = inst->fn,
-                .x  = inst->x ? b->inst[inst->x-1].id - inst->id : 0,  // x,y,z as relative offsets
-                .y  = inst->y ? b->inst[inst->y-1].id - inst->id : 0,
-                .z  = inst->z ? b->inst[inst->z-1].id - inst->id : 0,
-                .ix = inst->ix,
-            };
+
+    for (int loop = 0; loop < 2; loop++) {
+        if (loop) {
+            p->loop = p->insts;
+        }
+        for (BInst *inst = b->inst; inst < b->inst + b->insts; inst++) {
+            if (inst->kind & LIVE && inst->kind > UNIFORM == loop) {
+                p->inst[inst->id = p->insts++] = (PInst) {
+                    .fn = inst->fn,
+                    .x  = inst->x ? b->inst[inst->x-1].id - inst->id : 0,
+                    .y  = inst->y ? b->inst[inst->y-1].id - inst->id : 0,
+                    .z  = inst->z ? b->inst[inst->z-1].id - inst->id : 0,
+                    .ix = inst->ix,
+                };
+            }
         }
     }
     drop(b);
@@ -204,10 +213,15 @@ Program* compile(Builder *b) {
 }
 
 void execute(Program const *p, int n, float const *uniform, float *varying[]) {
-    V32 *v = calloc((size_t)p->insts, sizeof *v);
-    for (int i = 0; i < n/K*K; i += K) { p->inst->fn(p->inst,v,i+K,uniform,varying); }
-    for (int i = n/K*K; i < n; i += 1) { p->inst->fn(p->inst,v,i+1,uniform,varying); }
-    free(v);
+    V32 *slots = calloc((size_t)p->insts, sizeof *slots);
+
+    PInst const *ip = p->inst,  *loop = ip + p->loop;
+    V32          *v = slots  , *vloop =  v + p->loop;
+
+    for (int i = 0; i < n/K*K; i += K) { ip->fn(ip,v,i+K,uniform,varying); ip = loop; v = vloop; }
+    for (int i = n/K*K; i < n; i += 1) { ip->fn(ip,v,i+1,uniform,varying); ip = loop; v = vloop; }
+
+    free(slots);
 }
 
 int internal_tests(void);

@@ -2,7 +2,7 @@ builddir = out
 
 clang = clang -Weverything -Xclang -nostdsysteminc
 opt   = $clang -Os
-dbg   = $clang -fsanitize=address,integer,undefined
+dbg   = $clang -fsanitize=address,integer,undefined -fno-sanitize-recover=all
 
 rule compile
     command = $cc -g -Werror -fdiagnostics-color -MD -MF $out.d -c $in -o $out

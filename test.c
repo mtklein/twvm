@@ -106,6 +106,20 @@ static void test_dce(void) {
     dump("dce",b,len(v0),NULL,v0);
 }
 
+static void test_uni(void) {
+    struct Builder *b = builder();
+    {
+        int x = load(b,0),
+            y = uniform(b,0),
+            z = fadd(b,y,splat(b,1.0f)),
+            w = fmul(b,x,z);
+        store(b,0,w);
+    }
+    float v0[] = {1,2,3,4,5,6};
+    float uniform = 3.0f;
+    dump("uni",b,len(v0),&uniform,v0);
+}
+
 int main(void) {
     for (int rc = internal_tests(); rc;) {
         return rc;
@@ -115,5 +129,6 @@ int main(void) {
     test_mutate();
     test_jump();
     test_dce();
+    test_uni();
     return 0;
 }
