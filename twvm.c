@@ -248,5 +248,27 @@ int internal_tests(void) {
         }
         free(p);
     }
+    {  // rc=3 loop hoisting
+        struct Builder *b = builder();
+        {
+            int x = load(b,0),
+                y = uniform(b,0),
+                z = fadd(b,y,splat(b,1.0f)),
+                w = fmul(b,x,z);
+            store(b,0,w);
+        }
+        Program *p = compile(b);
+        if (0 || p->insts != 7
+              || p->loop  != 3
+              || p->inst[0].fn != uniform_
+              || p->inst[1].fn != splat_
+              || p->inst[2].fn != fadd_
+              || p->inst[3].fn != load_
+              || p->inst[4].fn != fmul_
+              || p->inst[5].fn != store_) {
+            rc = 3;
+        }
+        free(p);
+    }
     return rc;
 }
