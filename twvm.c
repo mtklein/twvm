@@ -215,8 +215,8 @@ int internal_tests(void) {
     int rc = 0;
     {  // rc=1 constant propagation
         Builder *b = builder();
-        int x = splat(b, 2.0f),
-            y = fmul (b, x,x);
+        int x = splat(b,2.0f),
+            y = fmul (b,x,x);
         if (b->inst[y-1].fn != splat_) {
             rc = 1;
         }
@@ -225,8 +225,8 @@ int internal_tests(void) {
     {  // rc=2 dead-code elimination
         Builder *b = builder();
         {
-            int live = splat(b, 2.0f),
-                dead = splat(b, 4.0f);
+            int live = splat(b,2.0f),
+                dead = splat(b,4.0f);
             (void)dead;
             store(b,0,live);
         }

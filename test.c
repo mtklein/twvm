@@ -30,8 +30,8 @@ static void dump_(char const *func, struct Builder *b, int n, float const *uni, 
 static void test_fmad(void) {
     struct Builder *b = builder();
     {
-        int x = load(b, 0),
-            y = fmad(b, x,x, splat(b,3.0f));
+        int x = load(b,0),
+            y = fmad(b,x,x,splat(b,3.0f));
         store(b,0,y);
     }
     float v0[] = {1,2,3,4,5,6};
@@ -54,7 +54,7 @@ static void test_binops(void) {
         {
             int x = load(b,0),
                 y = load(b,1);
-            store(b,0, op[i].fn(b,x,y));
+            store(b,0,op[i].fn(b,x,y));
         }
         float v0[] = {1,2,3,4,5,6},
               v1[] = {4,4,4,4,4,4};
@@ -65,8 +65,8 @@ static void test_binops(void) {
 static void test_mutate(void) {
     struct Builder *b = builder();
     {
-        int x = load(b, 0);
-        mutate(b, &x, fmul(b, x, splat(b,3.0f)));
+        int x = load(b,0);
+        mutate(b,&x,fmul(b,x,splat(b,3.0f)));
         store(b,0,x);
     }
     float v0[] = {1,2,3,4,5,6};
@@ -76,14 +76,14 @@ static void test_mutate(void) {
 static void test_jump(void) {
     struct Builder *b = builder();
     {
-        int x = load(b, 0);
+        int x = load(b,0);
         {
-            int cond = fgt (b, x, splat(b,0.0f)),
-                newx = bsel(b, cond
-                             , fsub(b, x, splat(b,1.0f))
-                             , x);
-            mutate(b, &x, newx);
-            jump(b, cond, cond);
+            int cond = fgt (b,x,splat(b,0.0f)),
+                newx = bsel(b,cond
+                             ,fsub(b,x,splat(b,1.0f))
+                             ,x);
+            mutate(b,&x,newx);
+            jump(b,cond,cond);
         }
         store(b,0,x);
     }
