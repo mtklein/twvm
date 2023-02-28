@@ -15,14 +15,14 @@ typedef struct PInst {
     union { int ix; float imm; };
 } PInst;
 
-typedef enum { LIVE=1, MATH=0,CONST=2,UNIFORM=4,LOAD=6,EFFECT=8|LIVE } Kind;
+typedef enum { MATH,CONST,UNIFORM,VARYING } Kind;
 
 typedef struct BInst {
     int (*fn)(struct PInst const *ip, V32 *v, int end, float const *uni, float *var[]);
     int   x,y,z;
     union { int ix; float imm; };
     union { Kind kind; int id; };
-    int   unused;
+    _Bool live, unused[3];
 } BInst;
 
 
@@ -101,15 +101,15 @@ stage(load) {
     else             { __builtin_memcpy(v, ptr + end - K, K*sizeof(float)); }
     next;
 }
-int load(Builder *b, int ix) { return push(b, .fn=load_, .ix=ix, .kind=LOAD); }
+int load(Builder *b, int ix) { return push(b, .fn=load_, .ix=ix, .kind=VARYING); }
 
 stage(store) {
     float *ptr = var[ip->ix];
-    if (end & (K-1)) { __builtin_memcpy(ptr + end - 1, v+ip->y,   sizeof(float)); }
-    else             { __builtin_memcpy(ptr + end - K, v+ip->y, K*sizeof(float)); }
+    if (end & (K-1)) { __builtin_memcpy(ptr + end - 1, v+ip->x,   sizeof(float)); }
+    else             { __builtin_memcpy(ptr + end - K, v+ip->x, K*sizeof(float)); }
     next;
 }
-void store(Builder *b, int ix, int val) { push(b, .fn=store_, .ix=ix, .y=val, .kind=EFFECT); }
+void store(Builder *b, int ix, int x) { push(b, .fn=store_, .ix=ix, .x=x, .kind=VARYING, .live=1); }
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wfloat-equal"
@@ -153,7 +153,7 @@ stage(mutate) {
     v[ip->x] = v[ip->y];
     next;
 }
-void mutate(Builder *b, int *var, int val) { push(b, .fn=mutate_, .x=*var, .y=val, .kind=EFFECT); }
+void mutate(Builder *b, int *var, int val) { push(b, .fn=mutate_, .x=*var, .y=val, .live=1); }
 
 stage(jump) {
     vector(int) const cond = v[ip->y].i;
@@ -168,9 +168,7 @@ stage(jump) {
     }
     next;
 }
-void jump(Builder *b, int dst, int cond) { push(b, .fn=jump_, .x=dst, .y=cond, .kind=EFFECT); }
-
-// TODO: are mutate and jump kinds too strict?  looping doesn't necessarily make things not-uniform.
+void jump(Builder *b, int dst, int cond) { push(b, .fn=jump_, .x=dst, .y=cond, .live=1); }
 
 typedef struct Program {
     int   insts,loop;
@@ -178,15 +176,15 @@ typedef struct Program {
 } Program;
 
 Program* compile(Builder *b) {
-    push(b, .fn=done_, .kind=EFFECT);
+    push(b, .fn=done_, .kind=VARYING, .live=1);
 
     int live = 0;
     for (BInst *inst = b->inst + b->insts; inst --> b->inst;) {
-        if (inst->kind & LIVE) {
+        if (inst->live) {
             live++;
-            if (inst->x) { b->inst[inst->x-1].kind |= LIVE; }
-            if (inst->y) { b->inst[inst->y-1].kind |= LIVE; }
-            if (inst->z) { b->inst[inst->z-1].kind |= LIVE; }
+            if (inst->x) { b->inst[inst->x-1].live = 1; }
+            if (inst->y) { b->inst[inst->y-1].live = 1; }
+            if (inst->z) { b->inst[inst->z-1].live = 1; }
         }
     }
 
@@ -197,7 +195,7 @@ Program* compile(Builder *b) {
             p->loop = p->insts;
         }
         for (BInst *inst = b->inst; inst < b->inst + b->insts; inst++) {
-            if (inst->kind & LIVE && inst->kind > UNIFORM == loop) {
+            if (inst->live && (inst->kind == VARYING) == loop) {
                 p->inst[inst->id = p->insts++] = (PInst) {
                     .fn = inst->fn,
                     .x  = inst->x ? b->inst[inst->x-1].id - inst->id : 0,
