@@ -2,6 +2,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#define expect(cond) \
+    if (!(cond)) fprintf(stderr, "expect(%s:%d %s)\n", __FILE__, __LINE__, #cond), __builtin_trap()
+
 int internal_tests(void);
 
 #define len(arr) (int)( sizeof(arr) / sizeof((arr)[0]) )
@@ -120,6 +123,29 @@ static void test_uni(void) {
     dump("uni",b,len(v0),&uniform,v0);
 }
 
+static void test_cse(void) {
+    struct Builder *b = builder();
+    {
+        int x = load(b,0),
+            y = fmul(b,x,x),
+            z = fmul(b,x,x);
+        expect(y == z);
+    }
+    free(compile(b));
+}
+
+static void test_no_cse(void) {
+    struct Builder *b = builder();
+    {
+        int x = load(b,0),
+            y = fmul(b,x,x);
+        mutate(b, &x, y);
+        int z = fmul(b,x,x);
+        expect(y != z);
+    }
+    free(compile(b));
+}
+
 int main(void) {
     for (int rc = internal_tests(); rc;) {
         return rc;
@@ -130,5 +156,7 @@ int main(void) {
     test_jump();
     test_dce();
     test_uni();
+    (void)test_cse;
+    test_no_cse();
     return 0;
 }
