@@ -91,6 +91,20 @@ static void test_jump(void) {
     dump("jump",b,len(v0),NULL,v0);
 }
 
+static void test_dce(void) {
+    struct Builder *b = builder();
+    {
+        int x = load(b,0),
+            y = fmul(b,x,x),
+            z = fadd(b,x,x),
+            w = fsub(b,z,x);
+        (void)y;
+        store(b,0,w);
+    }
+    float v0[] = {1,2,3,4,5,6};
+    dump("dce",b,len(v0),NULL,v0);
+}
+
 int main(void) {
     for (int rc = internal_tests(); rc;) {
         return rc;
@@ -99,5 +113,6 @@ int main(void) {
     test_binops();
     test_mutate();
     test_jump();
+    test_dce();
     return 0;
 }
