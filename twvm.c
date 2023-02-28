@@ -21,8 +21,8 @@ typedef struct BInst {
     int (*fn)(struct PInst const *ip, V32 *v, int end, float const *uni, float *var[]);
     int   x,y,z;
     union { int ix; float imm; };
-    Kind  kind;
-    int   id;
+    union { Kind kind; int id; };
+    int   unused;
 } BInst;
 
 
