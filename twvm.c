@@ -47,7 +47,12 @@ static void drop(Builder *b) {
     free(b);
 }
 
-#define next __attribute__((musttail)) return ip[1].fn(ip+1,v+1, end,uni,var)
+#if defined(__clang__)
+    #define next __attribute__((musttail)) return ip[1].fn(ip+1,v+1, end,uni,var)
+#else
+    #define next                           return ip[1].fn(ip+1,v+1, end,uni,var)
+#endif
+
 #define stage(name) \
     static int name##_(PInst const *ip, V32 *v, int end, float const *uni, float *var[])
 

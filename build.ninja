@@ -3,6 +3,7 @@ builddir = out
 clang = clang -Weverything -Xclang -nostdsysteminc
 opt   = $clang -Os
 dbg   = $clang -fsanitize=address,integer,undefined -fno-sanitize-recover=all
+gcc   = gcc-12 -O1 -Wall -Wextra
 
 rule compile
     command = $cc -g -Werror -fdiagnostics-color -MD -MF $out.d -c $in -o $out
@@ -18,20 +19,29 @@ rule run
 rule diff
     command = diff $in > $out
 
-build out/opt/twvm.o: compile twvm.c
-    cc = $opt
-build out/opt/test.o: compile test.c
-    cc = $opt
-build out/opt/test:   link out/opt/test.o out/opt/twvm.o
-    cc = $opt
-build test.opt: run out/opt/test
-
 build out/dbg/twvm.o: compile twvm.c
     cc = $dbg
 build out/dbg/test.o: compile test.c
     cc = $dbg
 build out/dbg/test:   link out/dbg/test.o out/dbg/twvm.o
     cc = $dbg
-build test.dbg: run out/dbg/test
+build test.log: run out/dbg/test
 
-build out/ok: diff test.opt test.dbg
+build out/opt/twvm.o: compile twvm.c
+    cc = $opt
+build out/opt/test.o: compile test.c
+    cc = $opt
+build out/opt/test:   link out/opt/test.o out/opt/twvm.o
+    cc = $opt
+build out/test.opt: run out/opt/test
+
+build out/gcc/twvm.o: compile twvm.c
+    cc = $gcc
+build out/gcc/test.o: compile test.c
+    cc = $gcc
+build out/gcc/test:   link out/gcc/test.o out/gcc/twvm.o
+    cc = $gcc
+build out/test.gcc: run out/gcc/test
+
+build out/opt.ok: diff test.log out/test.opt
+build out/gcc.ok: diff test.log out/test.gcc
