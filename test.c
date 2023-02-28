@@ -39,7 +39,7 @@ static void test_fmad(void) {
 }
 
 static void test_binops(void) {
-    #define M(x) {x,#x}
+#define M(x) {x,#x}
     struct {
         int (*fn)(struct Builder*, int,int);
         char const *name;
@@ -48,6 +48,7 @@ static void test_binops(void) {
         M(feq), M(flt),M(fle), M(fgt),M(fge),
         M(band), M(bor), M(bxor),
     };
+#undef M
 
     for (int i = 0; i < len(op); i++) {
         struct Builder *b = builder();
