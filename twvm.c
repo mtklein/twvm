@@ -11,7 +11,7 @@ typedef union {
 
 typedef struct PInst {
     int (*fn)(struct PInst const *ip, V32 *v, int end, float const *uni, float *var[]);
-    int   x,y,z;
+    int   x,y,z;  // Relative to this instruction (almost always negative).
     union { int ix; float imm; };
 } PInst;
 
@@ -19,10 +19,10 @@ typedef enum { MATH,CONST,UNIFORM,VARYING } Kind;
 
 typedef struct BInst {
     int (*fn)(struct PInst const *ip, V32 *v, int end, float const *uni, float *var[]);
-    int   x,y,z;
+    int   x,y,z;  // Absolute, but 1-indexed so that 0 can mean N/A.
     union { int ix; float imm; };
     union { Kind kind; int id; };
-    _Bool live, unused[3];
+    _Bool live, loop_dependent, unused[2];
 } BInst;
 
 typedef struct Entry {
@@ -60,7 +60,8 @@ stage(done) {
     return 0;
 }
 
-static int constant_prop(Builder *b, BInst inst) {
+// Constant folding: math on constants produces a constant.
+static int constant_fold(Builder *b, BInst inst) {
     while (inst.kind == MATH) {
         if (inst.x && b->inst[inst.x-1].kind != CONST) { break; }
         if (inst.y && b->inst[inst.y-1].kind != CONST) { break; }
@@ -81,9 +82,9 @@ static int constant_prop(Builder *b, BInst inst) {
     return 0;
 }
 
-// In cse_* functions, we use id=0 to indicate an empty Entry,
-// and maintain the invariant that there is always at least one empty Entry, except if b->cse=NULL.
-
+// Common sub-expression elimination: have we seen this same instruction before?
+// Note: in cse_* functions, we use id=0 to indicate an empty Entry,
+//       and always keep at least one empty Entry (except of course when b->cse=NULL).
 static int cse_lookup(Builder const *b, BInst inst, unsigned hash) {
     if (b->cse)
     for (unsigned mask=(unsigned)(b->cse_cap-1), i=hash&mask; b->cse[i].id; i = (i+1)&mask) {
@@ -94,30 +95,29 @@ static int cse_lookup(Builder const *b, BInst inst, unsigned hash) {
     }
     return 0;
 }
-
-static void just_insert(Entry *cse, int cap, unsigned hash, int id) {
+static void cse_just_insert(Entry *cse, int cap, unsigned hash, int id) {
     unsigned i, mask = (unsigned)(cap-1);
     for (i = hash&mask; cse[i].id; i = (i+1)&mask);
     cse[i] = (Entry){hash,id};
 }
-
 static void cse_insert(Builder *b, unsigned hash, int id) {
     if (b->cse_len/3 >= b->cse_cap/4) {
         int    cap = b->cse_cap ? 2*b->cse_cap : 2;
         Entry *cse = calloc((size_t)cap, sizeof *cse);
         for (int i = 0; i < b->cse_cap; i++) {
             if (b->cse[i].id) {
-                just_insert(cse,cap, b->cse[i].hash, b->cse[i].id);
+                cse_just_insert(cse,cap, b->cse[i].hash, b->cse[i].id);
             }
         }
         free(b->cse);
         b->cse     = cse;
         b->cse_cap = cap;
     }
-    just_insert(b->cse, b->cse_cap, hash, id);
+    cse_just_insert(b->cse, b->cse_cap, hash, id);
     b->cse_len++;
 }
 
+// Just an arbitrary, easy-to-implement hash function.  Results won't be sensitive to this choice.
 static unsigned fnv1a(void const *v, size_t len) {
     unsigned hash = 0x811c9dc5;
     for (unsigned char const *b=v, *end=b+len; b != end; b++) {
@@ -127,31 +127,22 @@ static unsigned fnv1a(void const *v, size_t len) {
     return hash;
 }
 
-static int push_(Builder *b, BInst inst) {
-    // Constant folding: math on constants produces a constant.
-    for (int id = constant_prop(b,inst); id;) { return id; }
-
-    _Bool const insert_cse = inst.kind < VARYING && !inst.live;
-
-    // Max up each input's kind into this instruction.  Determines loop-invariant hoisting.
-    if (inst.x && inst.kind < b->inst[inst.x-1].kind) { inst.kind = b->inst[inst.x-1].kind; }
-    if (inst.y && inst.kind < b->inst[inst.y-1].kind) { inst.kind = b->inst[inst.y-1].kind; }
-    if (inst.z && inst.kind < b->inst[inst.z-1].kind) { inst.kind = b->inst[inst.z-1].kind; }
-
-    // Common sub-expression elimination: have we seen this same instruction before?
+static int push_(Builder *b, BInst const inst) {
+    // The order we try common sub-expression elimination and constant folding doesn't much matter.
     unsigned const hash = fnv1a(&inst, sizeof inst);
-    for (int id = cse_lookup(b,inst,hash); id;) { return id; }
+    for (int id = cse_lookup   (b,inst,hash); id;) { return id; }
+    for (int id = constant_fold(b,inst     ); id;) { return id; }
 
     if ((b->insts & (b->insts-1)) == 0) {
         b->inst = realloc(b->inst, (size_t)(b->insts ? b->insts * 2 : 1) * sizeof *b->inst);
     }
-    b->inst[b->insts++] = inst;
-    if (insert_cse) { cse_insert(b,hash,b->insts); }
-    return b->insts;  // Builder IDs are 1-indexed so 0 can indicate N/A.
+    b->inst[b->insts++] = inst;  // Builder IDs (here b->insts) are 1-indexed.
+    if (inst.kind < VARYING && !inst.live) { cse_insert(b,hash,b->insts); }
+    return b->insts;
 }
 #define push(b,...) push_(b, (BInst){__VA_ARGS__})
 
-// When op(x,y)==op(y,x), use sort() instead of push() to canonicalize, allowing more CSE.
+// When op(x,y)==op(y,x), using sort() instead of push() will canonicalize, allowing more CSE.
 static int sort_(Builder *b, BInst inst) {
     if (inst.x > inst.y) {
         int tmp = inst.y;
@@ -235,7 +226,7 @@ stage(mutate) {
 void mutate(Builder *b, int *var, int val) {
     push(b, .fn=mutate_, .x=*var, .y=val, .live=1);
 
-    // Forget about any previous CSE entries when one mutates.  (TODO: kind of a big hammer)
+    // Forget all CSE entries when anything mutates.  (TODO: kind of a big hammer)
     __builtin_bzero(b->cse, (size_t)b->cse_cap * sizeof *b->cse);
     b->cse_len = 0;
 }
@@ -276,13 +267,23 @@ Program* compile(Builder *b) {
 
     Program *p = calloc(1, sizeof *p + (size_t)live * sizeof *b->inst);
 
-    // Loop-invariant hoisting: run all uniform instructions first (and once), loop on varying.
+    // Loop-invariant hoisting: constant and uniform instructions can run once,
+    // but anything affected by a varying is loop-dependent.
+    for (BInst *inst = b->inst; inst < b->inst + b->insts; inst++) {
+        if (inst->kind == VARYING
+                || (inst->x && b->inst[inst->x-1].loop_dependent)
+                || (inst->y && b->inst[inst->y-1].loop_dependent)
+                || (inst->z && b->inst[inst->z-1].loop_dependent)) {
+            inst->loop_dependent = 1;
+        }
+    }
+
     for (int loop = 0; loop < 2; loop++) {
         if (loop) {
             p->loop = p->insts;
         }
         for (BInst *inst = b->inst; inst < b->inst + b->insts; inst++) {
-            if (inst->live && (inst->kind == VARYING) == loop) {
+            if (inst->live && inst->loop_dependent == loop) {
                 p->inst[inst->id = p->insts++] = (PInst) {
                     .fn = inst->fn,
                     .x  = inst->x ? b->inst[inst->x-1].id - inst->id : 0,
@@ -298,15 +299,16 @@ Program* compile(Builder *b) {
 }
 
 void execute(Program const *p, int n, float const *uniform, float *varying[]) {
-    V32 *slots = calloc((size_t)p->insts, sizeof *slots);
+    V32 *val = calloc((size_t)p->insts, sizeof *val);
 
+    // This is loop-invariant hoisting: run first from the top, then any subsequent from p->loop.
     PInst const *ip = p->inst,  *loop = ip + p->loop;
-    V32          *v = slots  , *vloop =  v + p->loop;
+    V32          *v = val    , *vloop =  v + p->loop;
 
     for (int i = 0; i < n/K*K; i += K) { ip->fn(ip,v,i+K,uniform,varying); ip = loop; v = vloop; }
     for (int i = n/K*K; i < n; i += 1) { ip->fn(ip,v,i+1,uniform,varying); ip = loop; v = vloop; }
 
-    free(slots);
+    free(val);
 }
 
 int internal_tests(void);
