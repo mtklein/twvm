@@ -178,13 +178,12 @@ Program* compile(Builder *b) {
     push(b, .fn=done_, .kind=LIVE);
 
     int live = 0;
-    for (int i = b->insts; i --> 0;) {
-        BInst inst = b->inst[i];
-        if (inst.kind == LIVE) {
+    for (BInst const *inst = b->inst + b->insts; inst --> b->inst;) {
+        if (inst->kind == LIVE) {
             live++;
-            if (inst.x) { b->inst[inst.x-1].kind = LIVE; }
-            if (inst.y) { b->inst[inst.y-1].kind = LIVE; }
-            if (inst.z) { b->inst[inst.z-1].kind = LIVE; }
+            if (inst->x) { b->inst[inst->x-1].kind = LIVE; }
+            if (inst->y) { b->inst[inst->y-1].kind = LIVE; }
+            if (inst->z) { b->inst[inst->z-1].kind = LIVE; }
         }
     }
 
