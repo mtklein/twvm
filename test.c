@@ -134,6 +134,16 @@ static void test_cse(void) {
     free(compile(b));
 }
 
+static void test_more_cse(void) {
+    struct Builder *b = builder();
+    {
+        int x = splat(b,2.0f),
+            y = splat(b,2.0f);
+        expect(x == y);
+    }
+    free(compile(b));
+}
+
 static void test_no_cse(void) {
     struct Builder *b = builder();
     {
@@ -141,6 +151,34 @@ static void test_no_cse(void) {
             y = fmul(b,x,x);
         mutate(b, &x, y);
         int z = fmul(b,x,x);
+        expect(y != z);
+    }
+    free(compile(b));
+}
+
+static void test_cse_sort(void) {
+    struct Builder *b = builder();
+     {
+        int x = load (b,0),
+            c = splat(b,2.0f),
+            y = fmul (b,x,c),
+            k = splat(b,2.0f),
+            z = fmul (b,k,x);
+        expect(c == k);
+        expect(y == z);
+    }
+    free(compile(b));
+}
+
+static void test_cse_no_sort(void) {
+    struct Builder *b = builder();
+     {
+        int x = load (b,0),
+            c = splat(b,2.0f),
+            y = fdiv (b,x,c),
+            k = splat(b,2.0f),
+            z = fdiv (b,k,x);
+        expect(c == k);
         expect(y != z);
     }
     free(compile(b));
@@ -156,7 +194,10 @@ int main(void) {
     test_jump();
     test_dce();
     test_uni();
-    (void)test_cse;
+    test_cse();
+    test_more_cse();
     test_no_cse();
+    test_cse_sort();
+    test_cse_no_sort();
     return 0;
 }

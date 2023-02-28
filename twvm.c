@@ -25,10 +25,16 @@ typedef struct BInst {
     _Bool live, unused[3];
 } BInst;
 
+typedef struct Entry {
+    unsigned hash;
+    int      id;
+} Entry;
 
 typedef struct Builder {
     BInst *inst;
     int    insts,unused;
+    Entry *cse;
+    int    cse_len,cse_cap;
 } Builder;
 
 Builder* builder(void) {
@@ -37,12 +43,14 @@ Builder* builder(void) {
 }
 static void drop(Builder *b) {
     free(b->inst);
+    free(b->cse);
     free(b);
 }
 
 #define next __attribute__((musttail)) return ip[1].fn(ip+1,v+1, end,uni,var)
 #define stage(name) \
     static int name##_(PInst const *ip, V32 *v, int end, float const *uni, float *var[])
+
 stage(done) {
     (void)ip;
     (void)v;
@@ -52,7 +60,7 @@ stage(done) {
     return 0;
 }
 
-static int push_(Builder *b, BInst inst) {
+static int constant_prop(Builder *b, BInst inst) {
     while (inst.kind == MATH) {
         if (inst.x && b->inst[inst.x-1].kind != CONST) { break; }
         if (inst.y && b->inst[inst.y-1].kind != CONST) { break; }
@@ -70,18 +78,80 @@ static int push_(Builder *b, BInst inst) {
         ip->fn(ip,v+3,0,NULL,NULL);
         return splat(b, v[3].f[0]);
     }
+    return 0;
+}
 
+static int cse_lookup(Builder const *b, BInst inst, unsigned hash) {
+    if (b->cse)
+    for (unsigned mask=(unsigned)(b->cse_cap-1), i=hash&mask; b->cse[i].id; i = (i+1)&mask) {
+        int const id = b->cse[i].id;
+        if (b->cse[i].hash == hash && 0 == __builtin_memcmp(&inst, b->inst + id-1, sizeof inst)) {
+            return id;
+        }
+    }
+    return 0;
+}
+
+static void just_insert(Entry *cse, int cap, unsigned hash, int id) {
+    unsigned i, mask = (unsigned)(cap-1);
+    for (i = hash&mask; cse[i].id; i = (i+1)&mask);
+    cse[i] = (Entry){hash,id};
+}
+
+static void cse_insert(Builder *b, unsigned hash, int id) {
+    if (b->cse_len/3 >= b->cse_cap/4) {
+        int    cap = b->cse_cap ? 2*b->cse_cap : 2;
+        Entry *cse = calloc((size_t)cap, sizeof *cse);
+        for (int i = 0; i < b->cse_cap; i++) {
+            if (b->cse[i].id) {
+                just_insert(cse,cap, b->cse[i].hash, b->cse[i].id);
+            }
+        }
+        free(b->cse);
+        b->cse     = cse;
+        b->cse_cap = cap;
+    }
+    just_insert(b->cse, b->cse_cap, hash, id);
+    b->cse_len++;
+}
+
+static unsigned fnv1a(void const *v, size_t len) {
+    unsigned hash = 0x811c9dc5;
+    for (unsigned char const *b=v, *end=b+len; b != end; b++) {
+        hash ^= *b;
+        __builtin_mul_overflow(hash, 0x01000193, &hash);
+    }
+    return hash;
+}
+
+static int push_(Builder *b, BInst inst) {
+    for (int id = constant_prop(b,inst); id;) { return id; }
+
+    _Bool const insert_cse = inst.kind < VARYING && !inst.live;
     if (inst.x && inst.kind < b->inst[inst.x-1].kind) { inst.kind = b->inst[inst.x-1].kind; }
     if (inst.y && inst.kind < b->inst[inst.y-1].kind) { inst.kind = b->inst[inst.y-1].kind; }
     if (inst.z && inst.kind < b->inst[inst.z-1].kind) { inst.kind = b->inst[inst.z-1].kind; }
+
+    unsigned const hash = fnv1a(&inst, sizeof inst);
+    for (int id = cse_lookup(b,inst,hash); id;) { return id; }
 
     if ((b->insts & (b->insts-1)) == 0) {
         b->inst = realloc(b->inst, (size_t)(b->insts ? b->insts * 2 : 1) * sizeof *b->inst);
     }
     b->inst[b->insts++] = inst;
+    if (insert_cse) { cse_insert(b,hash,b->insts); }
     return b->insts;  // Builder IDs are 1-indexed so 0 can indicate N/A.
 }
+static int sort_(Builder *b, BInst inst) {
+    if (inst.x > inst.y) {
+        int tmp = inst.y;
+        inst.y  = inst.x;
+        inst.x  = tmp;
+    }
+    return push_(b,inst);
+}
 #define push(b,...) push_(b, (BInst){__VA_ARGS__})
+#define sort(b,...) sort_(b, (BInst){__VA_ARGS__})
 
 stage(splat) {
     v->f = ( (vector(float)){0} + 1 ) * ip->imm;
@@ -133,17 +203,17 @@ stage(bsel) {
 
 #pragma GCC diagnostic pop
 
-int fadd(Builder *b, int x, int y       ) { return push(b, .fn=fadd_, .x=x, .y=y      ); }
+int fadd(Builder *b, int x, int y       ) { return sort(b, .fn=fadd_, .x=x, .y=y      ); }
 int fsub(Builder *b, int x, int y       ) { return push(b, .fn=fsub_, .x=x, .y=y      ); }
-int fmul(Builder *b, int x, int y       ) { return push(b, .fn=fmul_, .x=x, .y=y      ); }
+int fmul(Builder *b, int x, int y       ) { return sort(b, .fn=fmul_, .x=x, .y=y      ); }
 int fdiv(Builder *b, int x, int y       ) { return push(b, .fn=fdiv_, .x=x, .y=y      ); }
-int fmad(Builder *b, int x, int y, int z) { return push(b, .fn=fmad_, .x=x, .y=y, .z=z); }
-int feq (Builder *b, int x, int y       ) { return push(b, .fn=feq_ , .x=x, .y=y      ); }
+int fmad(Builder *b, int x, int y, int z) { return sort(b, .fn=fmad_, .x=x, .y=y, .z=z); }
+int feq (Builder *b, int x, int y       ) { return sort(b, .fn=feq_ , .x=x, .y=y      ); }
 int flt (Builder *b, int x, int y       ) { return push(b, .fn=flt_ , .x=x, .y=y      ); }
 int fle (Builder *b, int x, int y       ) { return push(b, .fn=fle_ , .x=x, .y=y      ); }
-int band(Builder *b, int x, int y       ) { return push(b, .fn=band_, .x=x, .y=y      ); }
-int bor (Builder *b, int x, int y       ) { return push(b, .fn=bor_ , .x=x, .y=y      ); }
-int bxor(Builder *b, int x, int y       ) { return push(b, .fn=bxor_, .x=x, .y=y      ); }
+int band(Builder *b, int x, int y       ) { return sort(b, .fn=band_, .x=x, .y=y      ); }
+int bor (Builder *b, int x, int y       ) { return sort(b, .fn=bor_ , .x=x, .y=y      ); }
+int bxor(Builder *b, int x, int y       ) { return sort(b, .fn=bxor_, .x=x, .y=y      ); }
 int bsel(Builder *b, int x, int y, int z) { return push(b, .fn=bsel_, .x=x, .y=y, .z=z); }
 
 int fgt(Builder *b, int x, int y) { return flt(b,y,x); }
@@ -153,7 +223,13 @@ stage(mutate) {
     v[ip->x] = v[ip->y];
     next;
 }
-void mutate(Builder *b, int *var, int val) { push(b, .fn=mutate_, .x=*var, .y=val, .live=1); }
+void mutate(Builder *b, int *var, int val) {
+    push(b, .fn=mutate_, .x=*var, .y=val, .live=1);
+
+    // TODO: this is kind of a big hammer
+    __builtin_bzero(b->cse, (size_t)b->cse_cap * sizeof *b->cse);
+    b->cse_len = 0;
+}
 
 stage(jump) {
     vector(int) const cond = v[ip->y].i;
