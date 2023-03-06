@@ -4,6 +4,7 @@ clang = clang -Weverything -Xclang -nostdsysteminc
 opt   = $clang -Os
 dbg   = $clang -fsanitize=address,integer,undefined -fno-sanitize-recover=all
 gcc   = gcc-12 -O1 -Wall -Wextra
+brew  = /opt/homebrew/opt/llvm/bin/$clang -Wno-declaration-after-statement
 
 rule compile
     command = $cc -g -Werror -fdiagnostics-color -MD -MF $out.d -c $in -o $out
@@ -43,5 +44,14 @@ build out/gcc/test:   link out/gcc/test.o out/gcc/twvm.o
     cc = $gcc
 build out/test.gcc: run out/gcc/test
 
-build out/opt.ok: diff test.log out/test.opt
-build out/gcc.ok: diff test.log out/test.gcc
+build out/brew/twvm.o: compile twvm.c
+    cc = $brew
+build out/brew/test.o: compile test.c
+    cc = $brew
+build out/brew/test:   link out/brew/test.o out/brew/twvm.o
+    cc = $brew
+build out/test.brew: run out/brew/test
+
+build out/opt.ok:  diff test.log out/test.opt
+build out/gcc.ok:  diff test.log out/test.gcc
+build out/brew.ok: diff test.log out/test.brew
