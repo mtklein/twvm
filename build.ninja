@@ -4,7 +4,7 @@ clang = clang -Weverything -Xclang -nostdsysteminc
 opt   = $clang -Os
 dbg   = $clang -fsanitize=address,integer,undefined -fno-sanitize-recover=all
 gcc   = gcc-12 -O1 -Wall -Wextra
-brew  = /opt/homebrew/opt/llvm/bin/$clang -Wno-declaration-after-statement
+brew  = /opt/homebrew/opt/llvm/bin/$clang -Wno-declaration-after-statement -Wno-unsafe-buffer-usage
 
 rule compile
     command = $cc -g -Werror -fdiagnostics-color -MD -MF $out.d -c $in -o $out
