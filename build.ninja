@@ -1,8 +1,8 @@
 builddir = out
 
 clang = clang -Weverything -Xclang -nostdsysteminc -Wno-declaration-after-statement
-opt   = $clang -Os
 dbg   = $clang -fsanitize=address,integer,undefined -fno-sanitize-recover=all
+opt   = $clang -Os
 
 rule compile
     command = $cc -g -Werror -fdiagnostics-color -MD -MF $out.d -c $in -o $out
@@ -15,23 +15,18 @@ rule link
 rule run
     command = ./$in > $out
 
-rule diff
-    command = diff $in > $out
-
-build out/dbg/twvm.o: compile twvm.c
+build out/dbg/twvm.o:  compile twvm.c
     cc = $dbg
-build out/dbg/test.o: compile test.c
+build out/dbg/test.o:  compile test.c
     cc = $dbg
-build out/dbg/test:   link out/dbg/test.o out/dbg/twvm.o
+build out/dbg/test:    link out/dbg/test.o out/dbg/twvm.o
     cc = $dbg
-build test.log: run out/dbg/test
+build out/dbg/test.ok: run out/dbg/test
 
-build out/opt/twvm.o: compile twvm.c
+build out/opt/twvm.o:  compile twvm.c
     cc = $opt
-build out/opt/test.o: compile test.c
+build out/opt/test.o:  compile test.c
     cc = $opt
-build out/opt/test:   link out/opt/test.o out/opt/twvm.o
+build out/opt/test:    link out/opt/test.o out/opt/twvm.o
     cc = $opt
-build out/test.opt: run out/opt/test
-
-build out/opt.ok:  diff test.log out/test.opt
+build out/opt/test.ok: run out/opt/test

@@ -1,3 +1,4 @@
+#include "expect.h"
 #include "twvm.h"
 #include <stdlib.h>
 
@@ -316,53 +317,51 @@ void execute(Program const *p, int n, float const *uniform, float *varying[]) {
     free(val);
 }
 
-int internal_tests(void);
-int internal_tests(void) {
-    int rc = 0;
-    {  // rc=1 constant propagation
-        Builder *b = builder();
-        int x = splat(b,2.0f),
-            y = fmul (b,x,x);
-        if (b->inst[y-1].fn != splat_) {
-            rc = 1;
-        }
-        drop(b);
+static void test_constant_prop(void) {
+    Builder *b = builder();
+    int x = splat(b,2.0f),
+        y = fmul (b,x,x);
+    expect(b->inst[y-1].fn == splat_);
+    drop(b);
+}
+
+static void test_dead_code_elimination(void) {
+    Builder *b = builder();
+    {
+        int live = splat(b,2.0f),
+            dead = splat(b,4.0f);
+        (void)dead;
+        store(b,0,live);
     }
-    {  // rc=2 dead-code elimination
-        Builder *b = builder();
-        {
-            int live = splat(b,2.0f),
-                dead = splat(b,4.0f);
-            (void)dead;
-            store(b,0,live);
-        }
-        Program *p = compile(b);
-        if (p->insts != 3) {
-            rc = 2;
-        }
-        free(p);
+    Program *p = compile(b);
+    expect(p->insts == 3);
+    free(p);
+}
+
+static void test_loop_hoisting(void) {
+    Builder *b = builder();
+    {
+        int x = load(b,0),
+            y = uniform(b,0),
+            z = fadd(b,y,splat(b,1.0f)),
+            w = fmul(b,x,z);
+        store(b,0,w);
     }
-    {  // rc=3 loop hoisting
-        struct Builder *b = builder();
-        {
-            int x = load(b,0),
-                y = uniform(b,0),
-                z = fadd(b,y,splat(b,1.0f)),
-                w = fmul(b,x,z);
-            store(b,0,w);
-        }
-        Program *p = compile(b);
-        if (0 || p->insts != 7
-              || p->loop  != 3
-              || p->inst[0].fn != uniform_
-              || p->inst[1].fn != splat_
-              || p->inst[2].fn != fadd_
-              || p->inst[3].fn != load_
-              || p->inst[4].fn != fmul_
-              || p->inst[5].fn != store_) {
-            rc = 3;
-        }
-        free(p);
-    }
-    return rc;
+    Program *p = compile(b);
+    expect(p->insts == 7);
+    expect(p->loop  == 3);
+    expect(p->inst[0].fn == uniform_);
+    expect(p->inst[1].fn == splat_);
+    expect(p->inst[2].fn == fadd_);
+    expect(p->inst[3].fn == load_);
+    expect(p->inst[4].fn == fmul_);
+    expect(p->inst[5].fn == store_);
+    free(p);
+}
+
+void internal_tests(void);
+void internal_tests(void) {
+    test_constant_prop();
+    test_dead_code_elimination();
+    test_loop_hoisting();
 }
