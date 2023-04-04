@@ -5,43 +5,22 @@ dbg   = $clang -fsanitize=address,integer,undefined -fno-sanitize-recover=all
 opt   = $clang -Os
 gcc   = gcc-12 -O1 -Wall -Wextra
 
-rule compile
-    command = $cc -g -Werror -fdiagnostics-color -MD -MF $out.d -c $in -o $out
+rule mondo
+    command = $cc -g -Werror -fdiagnostics-color -MD -MF $out.d -Wl,-dead_strip $in -o $out
     depfile = $out.d
     deps    = gcc
-
-rule link
-    command = $cc -Wl,-dead_strip $in -o $out
 
 rule run
     command = ./$in > $out
 
-build out/dbg/twvm.o:   compile twvm.c
-    cc = $dbg
-build out/dbg/test.o:   compile test.c
-    cc = $dbg
-build out/dbg/expect.o: compile expect.c
-    cc = $dbg
-build out/dbg/test:     link out/dbg/test.o out/dbg/twvm.o out/dbg/expect.o
-    cc = $dbg
 build out/dbg/test.ok:  run out/dbg/test
+build out/dbg/test:     mondo test.c
+    cc = $dbg
 
-build out/opt/twvm.o:   compile twvm.c
-    cc = $opt
-build out/opt/test.o:   compile test.c
-    cc = $opt
-build out/opt/expect.o: compile expect.c
-    cc = $opt
-build out/opt/test:     link out/opt/test.o out/opt/twvm.o out/opt/expect.o
-    cc = $opt
 build out/opt/test.ok:  run out/opt/test
+build out/opt/test:     mondo test.c
+    cc = $opt
 
-build out/gcc/twvm.o:   compile twvm.c
-    cc = $gcc
-build out/gcc/test.o:   compile test.c
-    cc = $gcc
-build out/gcc/expect.o: compile expect.c
-    cc = $gcc
-build out/gcc/test:     link out/gcc/test.o out/gcc/twvm.o out/gcc/expect.o
-    cc = $gcc
 build out/gcc/test.ok:  run out/gcc/test
+build out/gcc/test:     mondo test.c
+    cc = $gcc
