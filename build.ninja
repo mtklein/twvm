@@ -3,6 +3,7 @@ builddir = out
 clang = clang -Weverything -Xclang -nostdsysteminc -Wno-declaration-after-statement
 dbg   = $clang -fsanitize=address,integer,undefined -fno-sanitize-recover=all
 opt   = $clang -Os
+gcc   = gcc-12 -O1 -Wall -Wextra
 
 rule compile
     command = $cc -g -Werror -fdiagnostics-color -MD -MF $out.d -c $in -o $out
@@ -34,3 +35,13 @@ build out/opt/expect.o: compile expect.c
 build out/opt/test:     link out/opt/test.o out/opt/twvm.o out/opt/expect.o
     cc = $opt
 build out/opt/test.ok:  run out/opt/test
+
+build out/gcc/twvm.o:   compile twvm.c
+    cc = $gcc
+build out/gcc/test.o:   compile test.c
+    cc = $gcc
+build out/gcc/expect.o: compile expect.c
+    cc = $gcc
+build out/gcc/test:     link out/gcc/test.o out/gcc/twvm.o out/gcc/expect.o
+    cc = $gcc
+build out/gcc/test.ok:  run out/gcc/test
