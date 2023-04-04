@@ -17,10 +17,7 @@ static void test(struct Builder *b, int n, float const *uni, float *var[], float
     execute(p,n,uni,var);
     free(p);
     for (int i = 0; i < n; i++) {
-        if (!equiv(var[0][i], want[i])) {
-            dprintf(2, "got %g, want %g\n", (double)var[0][i], (double)want[i]);
-            __builtin_trap();
-        }
+        expect(equiv(var[0][i], want[i]));
     }
 }
 
