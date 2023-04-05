@@ -2,7 +2,7 @@ builddir = out
 
 clang = clang -Weverything -Xclang -nostdsysteminc -Wno-declaration-after-statement
 dbg   = $clang -fsanitize=address,integer,undefined -fno-sanitize-recover=all
-opt   = $clang -Os
+opt   = $clang -Os -DNDEBUG
 gcc   = gcc-12 -O1 -Wall -Wextra
 
 rule mondo

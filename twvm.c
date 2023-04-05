@@ -1,5 +1,6 @@
 #include "expect.h"
 #include "twvm.h"
+#include <assert.h>
 #include <stdlib.h>
 
 #define K 4
@@ -41,11 +42,6 @@ typedef struct Builder {
 Builder* builder(void) {
     Builder *b = calloc(1, sizeof *b);
     return b;
-}
-static void drop(Builder *b) {
-    free(b->inst);
-    free(b->cse);
-    free(b);
 }
 
 #if defined(__clang__)
@@ -300,7 +296,11 @@ Program* compile(Builder *b) {
             }
         }
     }
-    drop(b);
+    assert(p->insts == live);
+
+    free(b->inst);
+    free(b->cse);
+    free(b);
     return p;
 }
 
@@ -322,7 +322,7 @@ static void test_constant_prop(void) {
     int x = splat(b,2.0f),
         y = fmul (b,x,x);
     expect(b->inst[y-1].fn == splat_);
-    drop(b);
+    free(compile(b));
 }
 
 static void test_dead_code_elimination(void) {
