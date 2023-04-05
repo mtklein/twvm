@@ -54,10 +54,9 @@ static void drop(Builder *b) {
     #define next                           return ip[1].fn(ip+1,v+1, end,uni,var)
 #endif
 
-#define stage(name) \
-    static int name##_(PInst const *ip, V32 *v, int end, float const *uni, float *var[])
+#define stage(name) int name##_(PInst const *ip, V32 *v, int end, float const *uni, float *var[])
 
-stage(done) {
+static stage(done) {
     (void)ip;
     (void)v;
     (void)end;
@@ -159,19 +158,19 @@ static int sort_(Builder *b, BInst inst) {
 }
 #define sort(b,...) sort_(b, (BInst){__VA_ARGS__})
 
-stage(splat) {
+static stage(splat) {
     v->f = ( (vector(float)){0} + 1 ) * ip->imm;
     next;
 }
 int splat(Builder *b, float imm) { return push(b, .fn=splat_, .imm=imm, .kind=CONST); }
 
-stage(uniform) {
+static stage(uniform) {
     v->f = ( (vector(float)){0} + 1 ) * uni[ip->ix];
     next;
 }
 int uniform(Builder *b, int ix) { return push(b, .fn=uniform_, .ix=ix, .kind=UNIFORM); }
 
-stage(load) {
+static stage(load) {
     float const *ptr = var[ip->ix];
     if (end & (K-1)) { __builtin_memcpy(v, ptr + end - 1,   sizeof(float)); }
     else             { __builtin_memcpy(v, ptr + end - K, K*sizeof(float)); }
@@ -179,7 +178,7 @@ stage(load) {
 }
 int load(Builder *b, int ix) { return push(b, .fn=load_, .ix=ix, .kind=VARYING); }
 
-stage(store) {
+static stage(store) {
     float *ptr = var[ip->ix];
     if (end & (K-1)) { __builtin_memcpy(ptr + end - 1, v+ip->x,   sizeof(float)); }
     else             { __builtin_memcpy(ptr + end - K, v+ip->x, K*sizeof(float)); }
@@ -190,18 +189,18 @@ void store(Builder *b, int ix, int x) { push(b, .fn=store_, .ix=ix, .x=x, .kind=
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wfloat-equal"
 
-stage(fadd) { v->f = v[ip->x].f +  v[ip->y].f             ; next; }
-stage(fsub) { v->f = v[ip->x].f -  v[ip->y].f             ; next; }
-stage(fmul) { v->f = v[ip->x].f *  v[ip->y].f             ; next; }
-stage(fdiv) { v->f = v[ip->x].f /  v[ip->y].f             ; next; }
-stage(fmad) { v->f = v[ip->x].f *  v[ip->y].f + v[ip->z].f; next; }
-stage(feq ) { v->i = v[ip->x].f == v[ip->y].f             ; next; }
-stage(flt ) { v->i = v[ip->x].f <  v[ip->y].f             ; next; }
-stage(fle ) { v->i = v[ip->x].f <= v[ip->y].f             ; next; }
-stage(band) { v->i = v[ip->x].i &  v[ip->y].i             ; next; }
-stage(bor ) { v->i = v[ip->x].i |  v[ip->y].i             ; next; }
-stage(bxor) { v->i = v[ip->x].i ^  v[ip->y].i             ; next; }
-stage(bsel) {
+static stage(fadd) { v->f = v[ip->x].f +  v[ip->y].f             ; next; }
+static stage(fsub) { v->f = v[ip->x].f -  v[ip->y].f             ; next; }
+static stage(fmul) { v->f = v[ip->x].f *  v[ip->y].f             ; next; }
+static stage(fdiv) { v->f = v[ip->x].f /  v[ip->y].f             ; next; }
+static stage(fmad) { v->f = v[ip->x].f *  v[ip->y].f + v[ip->z].f; next; }
+static stage(feq ) { v->i = v[ip->x].f == v[ip->y].f             ; next; }
+static stage(flt ) { v->i = v[ip->x].f <  v[ip->y].f             ; next; }
+static stage(fle ) { v->i = v[ip->x].f <= v[ip->y].f             ; next; }
+static stage(band) { v->i = v[ip->x].i &  v[ip->y].i             ; next; }
+static stage(bor ) { v->i = v[ip->x].i |  v[ip->y].i             ; next; }
+static stage(bxor) { v->i = v[ip->x].i ^  v[ip->y].i             ; next; }
+static stage(bsel) {
     v->i = ( v[ip->x].i & v[ip->y].i)
          | (~v[ip->x].i & v[ip->z].i);
     next;
@@ -225,7 +224,7 @@ int bsel(Builder *b, int x, int y, int z) { return push(b, .fn=bsel_, .x=x, .y=y
 int fgt(Builder *b, int x, int y) { return flt(b,y,x); }
 int fge(Builder *b, int x, int y) { return fle(b,y,x); }
 
-stage(mutate) {
+static stage(mutate) {
     v[ip->x] = v[ip->y];
     next;
 }
@@ -237,7 +236,7 @@ void mutate(Builder *b, int *var, int val) {
     b->cse_len = 0;
 }
 
-stage(jump) {
+static stage(jump) {
     vector(int) const cond = v[ip->y].i;
     int any = 0;
     for (int i = 0; i < K; i++) {
@@ -257,12 +256,15 @@ typedef struct Program {
     PInst inst[];
 } Program;
 
+#define  forward(elt,arr) for (__typeof__(arr) elt = arr; elt < arr + arr##s; elt++)
+#define backward(elt,arr) for (__typeof__(arr) elt = arr + arr##s; elt --> arr;)
+
 Program* compile(Builder *b) {
     push(b, .fn=done_, .kind=VARYING, .live=1);
 
     // Dead code elimination: mark inputs to live instructions as live.
     int live = 0;
-    for (BInst *inst = b->inst + b->insts; inst --> b->inst;) {
+    backward(inst, b->inst) {
         if (inst->live) {
             live++;
             if (inst->x) { b->inst[inst->x-1].live = 1; }
@@ -275,7 +277,7 @@ Program* compile(Builder *b) {
 
     // Loop-invariant hoisting: constant and uniform instructions can run once,
     // but anything affected by a varying is loop-dependent.
-    for (BInst *inst = b->inst; inst < b->inst + b->insts; inst++) {
+    forward(inst, b->inst) {
         if (inst->kind == VARYING
                 || (inst->x && b->inst[inst->x-1].loop_dependent)
                 || (inst->y && b->inst[inst->y-1].loop_dependent)
@@ -288,7 +290,7 @@ Program* compile(Builder *b) {
         if (loop) {
             p->loop = p->insts;
         }
-        for (BInst *inst = b->inst; inst < b->inst + b->insts; inst++) {
+        forward(inst, b->inst) {
             if (inst->live && inst->loop_dependent == loop) {
                 p->inst[inst->id = p->insts++] = (PInst) {
                     .fn = inst->fn,
