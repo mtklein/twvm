@@ -80,11 +80,12 @@ static int constant_fold(Builder *b, BInst inst) {
 // Note: in cse_* functions, we use id=0 to indicate an empty Entry,
 //       and always keep at least one empty Entry (except of course when b->cse=NULL).
 static int cse_lookup(Builder const *b, BInst inst, unsigned hash) {
-    if (b->cse)
-    for (unsigned mask=(unsigned)(b->cse_cap-1), i=hash&mask; b->cse[i].id; i = (i+1)&mask) {
-        int const id = b->cse[i].id;
-        if (b->cse[i].hash == hash && 0 == __builtin_memcmp(&inst, b->inst+id, sizeof inst)) {
-            return id;
+    if (b->cse) {
+        for (unsigned mask=(unsigned)(b->cse_cap-1), i=hash&mask; b->cse[i].id; i = (i+1)&mask) {
+            int const id = b->cse[i].id;
+            if (b->cse[i].hash == hash && 0 == __builtin_memcmp(&inst, b->inst+id, sizeof inst)) {
+                return id;
+            }
         }
     }
     return 0;
@@ -110,6 +111,7 @@ static void cse_insert(Builder *b, unsigned hash, int id) {
     }
     cse_just_insert(b->cse, b->cse_cap, hash, id);
     b->cse_len++;
+    assert(b->cse_len < b->cse_cap);
 }
 
 // Just an arbitrary, easy-to-implement hash function.  Results won't be sensitive to this choice.
@@ -131,9 +133,12 @@ static int push_(Builder *b, BInst const inst) {
     if ((b->insts & (b->insts-1)) == 0) {
         b->inst = realloc(b->inst, (size_t)(b->insts ? b->insts * 2 : 1) * sizeof *b->inst);
     }
-    b->inst[b->insts] = inst;
-    if (inst.kind < VARYING && !inst.live) { cse_insert(b,hash,b->insts); }
-    return b->insts++;
+    int const id = b->insts++;
+    b->inst[id] = inst;
+    if (inst.kind < VARYING && !inst.live) {
+        cse_insert(b,hash,id);
+    }
+    return id;
 }
 #define push(b,...) push_(b, (BInst){__VA_ARGS__})
 
@@ -150,11 +155,11 @@ static int sort_(Builder *b, BInst inst) {
 
 Builder* builder(void) {
     Builder *b = calloc(1, sizeof *b);
-    // Inject a phony instruction as id=0 so the rest of code can assume every BInst's
-    // children x,y,z always exist (including even this BInst, pointing back to itself).
+    // A phony BInst as id=0 lets us assume every BInst's children x,y,z always exist
+    // (including even the phony instruction's children, each pointing back to id=0 itself).
     //    .fn=NULL    makes execute() crash should we forget to skip this instruction in compile();
-    //    .kind=CONST lets constant_fold() treat this silently as an (unused) 0.0f constant;
-    //    .live=1     stops us from inserting id=0 into our common subexpression hash table.
+    //    .kind=CONST lets constant_fold() tolerate this silently as an (unused) constant input;
+    //    .live=1     prevents us from inserting id=0 into our common subexpression hash table.
     push(b, .fn=NULL, .kind=CONST, .live=1);
     return b;
 }
