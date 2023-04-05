@@ -1,5 +1,5 @@
-#include "expect.c"
-#include "twvm.c"
+#include "expect.h"
+#include "twvm.h"
 #include <stdio.h>
 #include <stdlib.h>
 

@@ -9,30 +9,41 @@ with open('build.ninja', 'w') as b:
 builddir = out
 
 clang = clang -Weverything -Xclang -nostdsysteminc -Wno-declaration-after-statement
-dbg   = $clang -fsanitize=address,integer,undefined -fno-sanitize-recover=all
-opt   = $clang -Os -DNDEBUG
-gcc   = gcc-12 -O1 -Wall -Wextra
 
-rule mondo
-    command = $cc -g -Werror -fdiagnostics-color -MD -MF $out.d -Wl,-dead_strip $in -o $out
-    depfile = $out.d
-    deps    = gcc
+rule compile
+  command = $cc -g -Werror -fdiagnostics-color -MD -MF $out.d -c $in -o $out
+  depfile = $out.d
+  deps    = gcc
+
+rule archive
+  command = ar rcs $out $in
+
+rule link
+  command = $cc -Wl,-dead_strip $in -o $out
 
 rule run
-    command = ./$in > $out
-
-build out/dbg/test.ok:  run out/dbg/test
-build out/dbg/test:     mondo test.c
-    cc = $dbg
-
-build out/opt/test.ok:  run out/opt/test
-build out/opt/test:     mondo test.c
-    cc = $opt
-
-build out/gcc/test.ok:  run out/gcc/test
-build out/gcc/test:     mondo test.c
-    cc = $gcc
+  command = ./$in > $out
 ''')
+
+    modes = {
+        'dbg': '$clang -fsanitize=address,integer,undefined -fno-sanitize-recover=all',
+        'opt': '$clang -Os -DNDEBUG',
+        'gcc': 'gcc-12 -O1 -Wall -Wextra',
+    }
+    srcs = subprocess.check_output(['git', 'ls-files', '*.c']).decode().split()
+    main = subprocess.check_output(['git', 'grep', '-l', 'main('] + srcs).decode().split()
+    rest = [src for src in srcs if src not in main]
+
+    for mode,cc in modes.items():
+        def target(src):
+            return os.path.join('out', mode, os.path.splitext(src)[0])
+        for src in srcs:
+            b.write(f'build {target(src)}.o: compile {src}\n  cc={cc}\n')
+        b.write(f'build {target("lib")}.a: archive {" ".join(target(src)+".o" for src in rest)}\n')
+        for src in main:
+            b.write(f'build {target(src)}: link {target(src)}.o {target("lib")}.a\n  cc={cc}\n')
+            if 'test' in src:
+                b.write(f'build {target(src)}.ok: run {target(src)}\n')
 
 rc = subprocess.call(['ninja'] + sys.argv[1:])
 if rc == 0:
