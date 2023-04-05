@@ -1,4 +1,5 @@
 #include "expect.h"
+#include "hash.h"
 #include "twvm.h"
 #include <assert.h>
 #include <stdlib.h>
@@ -33,10 +34,9 @@ typedef struct Entry {
 } Entry;
 
 typedef struct Builder {
-    BInst *inst;
-    int    insts,unused;
-    Entry *cse;
-    int    cse_len,cse_cap;
+    BInst       *inst;
+    int          insts,unused;
+    struct hash *cse;
 } Builder;
 
 #if defined(__clang__)
@@ -77,41 +77,18 @@ static int constant_fold(Builder *b, BInst inst) {
 }
 
 // Common sub-expression elimination: have we seen this same instruction before?
-// Note: in cse_* functions, we use id=0 to indicate an empty Entry,
-//       and always keep at least one empty Entry (except of course when b->cse=NULL).
-static int cse_lookup(Builder const *b, BInst inst, unsigned hash) {
-    if (b->cse) {
-        for (unsigned mask=(unsigned)(b->cse_cap-1), i=hash&mask; b->cse[i].id; i = (i+1)&mask) {
-            int const id = b->cse[i].id;
-            if (b->cse[i].hash == hash && 0 == __builtin_memcmp(&inst, b->inst+id, sizeof inst)) {
-                return id;
-            }
-        }
+typedef struct {
+    Builder const *b;
+    BInst   const *want;
+    int            id, unused;
+} MatchCtx;
+static _Bool cse_match(int val, void *vctx) {
+    MatchCtx *ctx = vctx;
+    if (0 == __builtin_memcmp(ctx->want, ctx->b->inst+val, sizeof *ctx->want)) {
+        ctx->id = val;
+        return 1;
     }
     return 0;
-}
-static void cse_just_insert(Entry *cse, int cap, unsigned hash, int id) {
-    assert(id);
-    unsigned i, mask = (unsigned)(cap-1);
-    for (i = hash&mask; cse[i].id; i = (i+1)&mask);
-    cse[i] = (Entry){hash,id};
-}
-static void cse_insert(Builder *b, unsigned hash, int id) {
-    if (b->cse_len/3 >= b->cse_cap/4) {
-        int    cap = b->cse_cap ? 2*b->cse_cap : 2;
-        Entry *cse = calloc((size_t)cap, sizeof *cse);
-        for (int i = 0; i < b->cse_cap; i++) {
-            if (b->cse[i].id) {
-                cse_just_insert(cse,cap, b->cse[i].hash, b->cse[i].id);
-            }
-        }
-        free(b->cse);
-        b->cse     = cse;
-        b->cse_cap = cap;
-    }
-    cse_just_insert(b->cse, b->cse_cap, hash, id);
-    b->cse_len++;
-    assert(b->cse_len < b->cse_cap);
 }
 
 // Just an arbitrary, easy-to-implement hash function.  Results won't be sensitive to this choice.
@@ -125,10 +102,12 @@ static unsigned fnv1a(void const *v, size_t len) {
 }
 
 static int push_(Builder *b, BInst const inst) {
-    // The order we try common sub-expression elimination and constant folding doesn't much matter.
+    for (int id = constant_fold(b,inst); id;) { return id; }
+
     unsigned const hash = fnv1a(&inst, sizeof inst);
-    for (int id = cse_lookup   (b,inst,hash); id;) { return id; }
-    for (int id = constant_fold(b,inst     ); id;) { return id; }
+    for (MatchCtx ctx = {b,.want=&inst}; hash_lookup(b->cse, hash, cse_match, &ctx); ) {
+        return ctx.id;
+    }
 
     if ((b->insts & (b->insts-1)) == 0) {
         b->inst = realloc(b->inst, (size_t)(b->insts ? b->insts * 2 : 1) * sizeof *b->inst);
@@ -136,7 +115,7 @@ static int push_(Builder *b, BInst const inst) {
     int const id = b->insts++;
     b->inst[id] = inst;
     if (inst.kind < VARYING && !inst.live) {
-        cse_insert(b,hash,id);
+        b->cse = hash_insert(b->cse, hash, id);
     }
     return id;
 }
@@ -238,8 +217,8 @@ void mutate(Builder *b, int *var, int val) {
     push(b, .fn=mutate_, .x=*var, .y=val, .live=1);
 
     // Forget all CSE entries when anything mutates.  (TODO: kind of a big hammer)
-    __builtin_bzero(b->cse, (size_t)b->cse_cap * sizeof *b->cse);
-    b->cse_len = 0;
+    free(b->cse);
+    b->cse = NULL;
 }
 
 static stage(jump) {
