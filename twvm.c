@@ -286,7 +286,8 @@ Program* compile(Builder *b) {
         p->loop = p->insts;
         forward(inst, b->inst) {
             if (inst->live && inst->loop_dependent == loop) {
-                p->inst[inst->id = p->insts++] = (PInst) {
+                inst->id = p->insts++;
+                p->inst[inst->id] = (PInst) {
                     .fn = inst->fn,
                     .x  = inst->x ? b->inst[inst->x-1].id - inst->id : 0,
                     .y  = inst->y ? b->inst[inst->y-1].id - inst->id : 0,
