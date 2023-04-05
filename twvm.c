@@ -287,9 +287,7 @@ Program* compile(Builder *b) {
     }
 
     for (int loop = 0; loop < 2; loop++) {
-        if (loop) {
-            p->loop = p->insts;
-        }
+        p->loop = p->insts;
         forward(inst, b->inst) {
             if (inst->live && inst->loop_dependent == loop) {
                 p->inst[inst->id = p->insts++] = (PInst) {
