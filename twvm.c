@@ -21,7 +21,7 @@ typedef enum { MATH,CONST,UNIFORM,VARYING } Kind;
 
 typedef struct BInst {
     int (*fn)(struct PInst const *ip, V32 *v, int end, float const *uni, float *var[]);
-    int   x,y,z;  // Absolute, but 1-indexed so that 0 can mean N/A.
+    int   x,y,z;  // Absolute into Builder->inst, with 0 predefined as a phony unused value (N/A).
     union { int ix; float imm; };
     union { Kind kind; int id; };
     _Bool live, loop_dependent, unused[2];
@@ -38,11 +38,6 @@ typedef struct Builder {
     Entry *cse;
     int    cse_len,cse_cap;
 } Builder;
-
-Builder* builder(void) {
-    Builder *b = calloc(1, sizeof *b);
-    return b;
-}
 
 #if defined(__clang__)
     #define next __attribute__((musttail)) return ip[1].fn(ip+1,v+1, end,uni,var)
@@ -63,16 +58,14 @@ static stage(done) {
 
 // Constant folding: math on constants produces a constant.
 static int constant_fold(Builder *b, BInst inst) {
-    while (inst.kind == MATH) {
-        if (inst.x && b->inst[inst.x-1].kind != CONST) { break; }
-        if (inst.y && b->inst[inst.y-1].kind != CONST) { break; }
-        if (inst.z && b->inst[inst.z-1].kind != CONST) { break; }
-
-        V32 v[4] = {0};
-        if (inst.x) { v[0].f[0] = b->inst[inst.x-1].imm; }
-        if (inst.y) { v[1].f[0] = b->inst[inst.y-1].imm; }
-        if (inst.z) { v[2].f[0] = b->inst[inst.z-1].imm; }
-
+    if (inst.kind == MATH && b->inst[inst.x].kind == CONST
+                          && b->inst[inst.y].kind == CONST
+                          && b->inst[inst.z].kind == CONST) {
+        V32 v[4] = {
+            {{b->inst[inst.x].imm}},
+            {{b->inst[inst.y].imm}},
+            {{b->inst[inst.z].imm}},
+        };
         PInst ip[] = {
             {.fn=inst.fn, .x=-3, .y=-2, .z=-1, .ix=inst.ix},
             {.fn=done_},
@@ -90,13 +83,14 @@ static int cse_lookup(Builder const *b, BInst inst, unsigned hash) {
     if (b->cse)
     for (unsigned mask=(unsigned)(b->cse_cap-1), i=hash&mask; b->cse[i].id; i = (i+1)&mask) {
         int const id = b->cse[i].id;
-        if (b->cse[i].hash == hash && 0 == __builtin_memcmp(&inst, b->inst + id-1, sizeof inst)) {
+        if (b->cse[i].hash == hash && 0 == __builtin_memcmp(&inst, b->inst+id, sizeof inst)) {
             return id;
         }
     }
     return 0;
 }
 static void cse_just_insert(Entry *cse, int cap, unsigned hash, int id) {
+    assert(id);
     unsigned i, mask = (unsigned)(cap-1);
     for (i = hash&mask; cse[i].id; i = (i+1)&mask);
     cse[i] = (Entry){hash,id};
@@ -137,9 +131,9 @@ static int push_(Builder *b, BInst const inst) {
     if ((b->insts & (b->insts-1)) == 0) {
         b->inst = realloc(b->inst, (size_t)(b->insts ? b->insts * 2 : 1) * sizeof *b->inst);
     }
-    b->inst[b->insts++] = inst;  // Builder IDs (here b->insts) are 1-indexed.
+    b->inst[b->insts] = inst;
     if (inst.kind < VARYING && !inst.live) { cse_insert(b,hash,b->insts); }
-    return b->insts;
+    return b->insts++;
 }
 #define push(b,...) push_(b, (BInst){__VA_ARGS__})
 
@@ -153,6 +147,17 @@ static int sort_(Builder *b, BInst inst) {
     return push_(b,inst);
 }
 #define sort(b,...) sort_(b, (BInst){__VA_ARGS__})
+
+Builder* builder(void) {
+    Builder *b = calloc(1, sizeof *b);
+    // Inject a phony instruction as id=0 so the rest of code can assume every BInst's
+    // children x,y,z always exist (including even this BInst, pointing back to itself).
+    //    .fn=NULL    makes execute() crash should we forget to skip this instruction in compile();
+    //    .kind=CONST lets constant_fold() treat this silently as an (unused) 0.0f constant;
+    //    .live=1     stops us from inserting id=0 into our common subexpression hash table.
+    push(b, .fn=NULL, .kind=CONST, .live=1);
+    return b;
+}
 
 static stage(splat) {
     v->f = ( (vector(float)){0} + 1 ) * ip->imm;
@@ -263,11 +268,16 @@ Program* compile(Builder *b) {
     backward(inst, b->inst) {
         if (inst->live) {
             live++;
-            if (inst->x) { b->inst[inst->x-1].live = 1; }
-            if (inst->y) { b->inst[inst->y-1].live = 1; }
-            if (inst->z) { b->inst[inst->z-1].live = 1; }
+            b->inst[inst->x].live = 1;
+            b->inst[inst->y].live = 1;
+            b->inst[inst->z].live = 1;
         }
     }
+
+    // Don't emit the phony id=0 instruction.
+    assert(b->inst[0].live);
+    b->inst[0].live = 0;
+    live--;
 
     Program *p = calloc(1, sizeof *p + (size_t)live * sizeof *b->inst);
 
@@ -275,9 +285,9 @@ Program* compile(Builder *b) {
     // but anything affected by a varying is loop-dependent.
     forward(inst, b->inst) {
         if (inst->kind == VARYING
-                || (inst->x && b->inst[inst->x-1].loop_dependent)
-                || (inst->y && b->inst[inst->y-1].loop_dependent)
-                || (inst->z && b->inst[inst->z-1].loop_dependent)) {
+                || (b->inst[inst->x].loop_dependent)
+                || (b->inst[inst->y].loop_dependent)
+                || (b->inst[inst->z].loop_dependent)) {
             inst->loop_dependent = 1;
         }
     }
@@ -289,9 +299,9 @@ Program* compile(Builder *b) {
                 inst->id = p->insts++;
                 p->inst[inst->id] = (PInst) {
                     .fn = inst->fn,
-                    .x  = inst->x ? b->inst[inst->x-1].id - inst->id : 0,
-                    .y  = inst->y ? b->inst[inst->y-1].id - inst->id : 0,
-                    .z  = inst->z ? b->inst[inst->z-1].id - inst->id : 0,
+                    .x  = b->inst[inst->x].id - inst->id,
+                    .y  = b->inst[inst->y].id - inst->id,
+                    .z  = b->inst[inst->z].id - inst->id,
                     .ix = inst->ix,
                 };
             }
@@ -322,7 +332,7 @@ static void test_constant_prop(void) {
     Builder *b = builder();
     int x = splat(b,2.0f),
         y = fmul (b,x,x);
-    expect(b->inst[y-1].fn == splat_);
+    expect(b->inst[y].fn == splat_);
     free(compile(b));
 }
 
