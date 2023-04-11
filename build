@@ -8,7 +8,7 @@ with open('build.ninja', 'w') as b:
     b.write('''
 builddir = out
 
-clang = clang -Weverything -Xclang -nostdsysteminc -Wno-declaration-after-statement
+clang = clang -Weverything -Wno-poison-system-directories -Wno-declaration-after-statement
 
 rule compile
   command = $cc -g -Werror -fdiagnostics-color -MD -MF $out.d -c $in -o $out
