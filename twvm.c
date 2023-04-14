@@ -133,12 +133,9 @@ static int sort_(Builder *b, BInst inst) {
 
 Builder* builder(void) {
     Builder *b = calloc(1, sizeof *b);
-    // A phony BInst as id=0 lets us assume every BInst's children x,y,z always exist
-    // (including even the phony instruction's children, each pointing back to id=0 itself).
-    //    .fn=NULL       crashes execute() if we forget to skip this instruction in compile();
-    //    .kind=CONSTANT lets constant_fold() tolerate this silently as an (unused) input;
-    //    .live=1        stops us from inserting id=0 into our common subexpression hash table.
-    push(b, .fn=NULL, .kind=CONSTANT, .live=1);
+    // A phony instruction as id=0 lets us assume that every BInst's inputs (x,y,z) always exist,
+    // tagged to pass .kind==CONSTANT checks in constant_fold().
+    push(b, .fn=NULL, .kind=CONSTANT);
     return b;
 }
 
