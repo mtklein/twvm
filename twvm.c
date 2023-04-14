@@ -13,7 +13,7 @@ typedef union {
 } V32;
 
 typedef struct PInst {
-    int (*fn)(struct PInst const *ip, V32 *v, int end, float *ptr[]);
+    int (*fn)(struct PInst const *ip, V32 *v, int end, void *ptr[]);
     int   x,y,z;  // Relative to this instruction (almost always negative).
     union { int ptr; float imm; };
 } PInst;
@@ -22,7 +22,7 @@ typedef enum { CONSTANT,UNIFORM,VARYING } Shape;
 typedef enum { CSE,NO_CSE,LIVE} Eval;
 
 typedef struct BInst {
-    int (*fn)(struct PInst const *ip, V32 *v, int end, float *ptr[]);
+    int (*fn)(struct PInst const *ip, V32 *v, int end, void *ptr[]);
     int   x,y,z;  // Absolute into b->inst, with id=0 predefined as a phony value (N/A).
     union { int ptr; float imm; };
 
@@ -55,7 +55,7 @@ Builder* builder(void) {
     #define next                           return ip[1].fn(ip+1,v+1,end,ptr)
 #endif
 
-#define stage(name) int name##_(PInst const *ip, V32 *v, int end, float *ptr[])
+#define stage(name) int name##_(PInst const *ip, V32 *v, int end, void *ptr[])
 
 static stage(done) {
     (void)ip;
@@ -313,7 +313,7 @@ Program* compile(Builder *b) {
     return p;
 }
 
-void execute(Program const *p, int n, float *ptr[]) {
+void execute(Program const *p, int n, void *ptr[]) {
     V32 *val = calloc((size_t)p->insts, sizeof *val);
 
     PInst const *ip = p->inst,  *loop = ip + p->loop;

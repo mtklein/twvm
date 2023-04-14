@@ -2,7 +2,7 @@
 
 struct Builder* builder(void);
 struct Program* compile(struct Builder*);
-void            execute(struct Program const*, int n, float *ptr[]);
+void            execute(struct Program const*, int n, void *ptr[]);
 
 int thread_id(struct Builder*);
 

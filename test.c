@@ -14,15 +14,16 @@ static _Bool equiv(float x, float y) {
         || (x != x && y != y);
 }
 
-static void test_(struct Builder *b, float const want[], int n, float *ptr[]) {
+static void test_(struct Builder *b, float const want[], int n, void *ptr[]) {
     struct Program *p = compile(b);
     execute(p,n,ptr);
     free(p);
+    float const *v0 = ptr[0];
     for (int i = 0; i < n; i++) {
-        expect(equiv(ptr[0][i], want[i]));
+        expect(equiv(v0[i], want[i]));
     }
 }
-#define test(b,want,...) test_(b,want,sizeof(want)/sizeof(0[want]), (float*[]){__VA_ARGS__})
+#define test(b,want,...) test_(b,want,sizeof(want)/sizeof(0[want]), (void*[]){__VA_ARGS__})
 
 static void test_fadd(void) {
     struct Builder *b = builder();
