@@ -272,29 +272,28 @@ typedef struct Program {
 Program* compile(Builder *b) {
     push(b, .fn=done_, .shape=VARYING, .eval=LIVE);
 
+    // Dead code elimination: the inputs of live instructions are live.
+    // Mark dead by fn=NULL, both letting us union eval/id, and handling the id=0 phony naturally.
+    int live = 0;
     backward(inst, b->inst) {
         if (inst->eval == LIVE) {
             b->inst[inst->x].eval = LIVE;
             b->inst[inst->y].eval = LIVE;
             b->inst[inst->z].eval = LIVE;
-        }
-    }
-    int live = 0;
-    forward(inst, b->inst) {
-        if (inst->eval != LIVE) {
+        } else {
             inst->fn = NULL;
         }
-        if (inst->fn) {
-            live++;
-        }
+        live += (inst->fn != NULL);
     }
 
     Program *p = calloc(1, sizeof *p + (size_t)live * sizeof *b->inst);
 
-    for (int loop = 0; loop < 2; loop++) {
-        p->loop = p->insts;
+    for (int varying = 0; varying < 2; varying++) {
+        if (varying) {
+            p->loop = p->insts;
+        }
         forward(inst, b->inst) {
-            if (inst->fn && (inst->shape == VARYING) == loop) {
+            if (inst->fn && (inst->shape == VARYING) == varying) {
                 inst->id = p->insts++;
                 p->inst[inst->id] = (PInst) {
                     .fn  = inst->fn,
