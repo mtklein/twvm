@@ -277,7 +277,7 @@ Program* compile(Builder *b) {
     }
 
     // Don't emit the phony id=0 instruction.
-    assert(b->inst[0].live);
+    assert(b->inst[0].fn == NULL && b->inst[0].live);
     b->inst[0].live = 0;
     live--;
 
