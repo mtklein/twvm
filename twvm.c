@@ -175,6 +175,7 @@ static stage(load_contiguous) {
 int load(Builder *b, int ptr, int ix) {
     if (b->inst[ix].shape == CONSTANT && b->inst[ix].imm == 0.0f) {
         // TODO: allow non-zero offset
+        // TODO: allow any uniform offset
         return push(b, .fn=load_uniform_, .ptr=ptr, .shape=UNIFORM);
     }
     if (b->inst[ix].fn == thread_id_) {
