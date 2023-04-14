@@ -19,13 +19,15 @@ typedef struct PInst {
 } PInst;
 
 typedef enum { UNKNOWN,CONSTANT,UNIFORM,VARYING } Shape;
+typedef enum { CSE,NO_CSE,LIVE} Eval;
 
 typedef struct BInst {
     int (*fn)(struct PInst const *ip, V32 *v, int end, float *ptr[]);
     int   x,y,z;  // Absolute into Builder->inst, with 0 predefined as a phony unused value (N/A).
     union { int ptr; float imm; };
-    union { Shape shape; int id; };
-    _Bool live, loop_dependent, unused[2];
+
+    Shape shape;
+    union { Eval eval; int id; };
 } BInst;
 
 typedef struct Entry {
@@ -101,7 +103,9 @@ static unsigned fnv1a(void const *v, size_t len) {
 }
 
 static int push_(Builder *b, BInst const inst) {
-    for (int id = constant_fold(b,inst); id;) { return id; }
+    for (int id = constant_fold(b,inst); id;) {
+        return id;
+    }
 
     unsigned const hash = fnv1a(&inst, sizeof inst);
     for (MatchCtx ctx = {b,.want=&inst}; hash_lookup(b->cse, hash, cse_match, &ctx); ) {
@@ -113,7 +117,8 @@ static int push_(Builder *b, BInst const inst) {
     }
     int const id = b->insts++;
     b->inst[id] = inst;
-    if (inst.shape < VARYING && !inst.live) {
+
+    if (inst.eval == CSE) {
         b->cse = hash_insert(b->cse, hash, id);
     }
     return id;
@@ -173,7 +178,7 @@ int load(Builder *b, int ptr, int ix) {
         return push(b, .fn=load_uniform_, .ptr=ptr, .shape=UNIFORM);
     }
     if (b->inst[ix].fn == thread_id_) {
-        return push(b, .fn=load_contiguous_, .ptr=ptr, .shape=VARYING);
+        return push(b, .fn=load_contiguous_, .ptr=ptr, .shape=VARYING, .eval=NO_CSE);
     }
     // TODO: gather
     __builtin_unreachable();
@@ -186,7 +191,7 @@ static stage(store) {
     next;
 }
 void store(Builder *b, int ptr, int x) {
-    push(b, .fn=store_, .ptr=ptr, .x=x, .shape=VARYING, .live=1);
+    push(b, .fn=store_, .ptr=ptr, .x=x, .shape=VARYING, .eval=LIVE);
 }
 
 #pragma GCC diagnostic push
@@ -232,7 +237,7 @@ static stage(mutate) {
     next;
 }
 void mutate(Builder *b, int *var, int val) {
-    push(b, .fn=mutate_, .x=*var, .y=val, .live=1);
+    push(b, .fn=mutate_, .x=*var, .y=val, .eval=LIVE);
 
     // Forget all CSE entries when anything mutates.  (TODO: kind of a big hammer)
     free(b->cse);
@@ -252,7 +257,7 @@ static stage(jump) {
     }
     next;
 }
-void jump(Builder *b, int dst, int cond) { push(b, .fn=jump_, .x=dst, .y=cond, .live=1); }
+void jump(Builder *b, int dst, int cond) { push(b, .fn=jump_, .x=dst, .y=cond, .eval=LIVE); }
 
 typedef struct Program {
     int   insts,loop;
@@ -263,41 +268,42 @@ typedef struct Program {
 #define backward(elt,arr) for (__typeof__(arr) elt = arr + arr##s; elt --> arr;)
 
 Program* compile(Builder *b) {
-    push(b, .fn=done_, .shape=VARYING, .live=1);
+    push(b, .fn=done_, .shape=VARYING, .eval=LIVE);
 
     // Dead code elimination: mark inputs to live instructions as live.
-    int live = 0;
     backward(inst, b->inst) {
-        if (inst->live) {
-            live++;
-            b->inst[inst->x].live = 1;
-            b->inst[inst->y].live = 1;
-            b->inst[inst->z].live = 1;
+        if (inst->eval == LIVE) {
+            b->inst[inst->x].eval = LIVE;
+            b->inst[inst->y].eval = LIVE;
+            b->inst[inst->z].eval = LIVE;
         }
     }
-
-    // Don't emit the phony id=0 instruction.
-    assert(b->inst[0].fn == NULL && b->inst[0].live);
-    b->inst[0].live = 0;
-    live--;
+    int live = 0;
+    forward(inst, b->inst) {
+        if (inst->eval != LIVE) {
+            inst->fn = NULL;
+        }
+        if (inst->fn) {
+            live++;
+        }
+    }
 
     Program *p = calloc(1, sizeof *p + (size_t)live * sizeof *b->inst);
 
     // Loop-invariant hoisting: constant and uniform instructions can run once,
     // but anything affected by a varying is loop-dependent.
     forward(inst, b->inst) {
-        if (inst->shape == VARYING
-                || (b->inst[inst->x].loop_dependent)
-                || (b->inst[inst->y].loop_dependent)
-                || (b->inst[inst->z].loop_dependent)) {
-            inst->loop_dependent = 1;
+        if (b->inst[inst->x].shape == VARYING ||
+            b->inst[inst->y].shape == VARYING ||
+            b->inst[inst->z].shape == VARYING) {
+            inst->shape = VARYING;
         }
     }
 
     for (int loop = 0; loop < 2; loop++) {
         p->loop = p->insts;
         forward(inst, b->inst) {
-            if (inst->live && inst->loop_dependent == loop) {
+            if (inst->fn && (inst->shape == VARYING) == loop) {
                 inst->id = p->insts++;
                 p->inst[inst->id] = (PInst) {
                     .fn  = inst->fn,
@@ -435,12 +441,7 @@ static void test_thread_id_cse(void) {
     {
         int x = thread_id(b),
             y = thread_id(b);
-    #if 0  // TODO
         expect(x == y);
-    #else
-        (void)x;
-        (void)y;
-    #endif
     }
     free(compile(b));
 }
