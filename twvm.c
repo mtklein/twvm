@@ -13,17 +13,17 @@ typedef union {
 } V32;
 
 typedef struct PInst {
-    int (*fn)(struct PInst const *ip, V32 *v, int end, float const *uni, float *var[]);
+    int (*fn)(struct PInst const *ip, V32 *v, int end, float *ptr[]);
     int   x,y,z;  // Relative to this instruction (almost always negative).
-    union { int ix; float imm; };
+    union { int ptr; float imm; };
 } PInst;
 
 typedef enum { UNKNOWN,CONSTANT,UNIFORM,VARYING } Kind;
 
 typedef struct BInst {
-    int (*fn)(struct PInst const *ip, V32 *v, int end, float const *uni, float *var[]);
+    int (*fn)(struct PInst const *ip, V32 *v, int end, float *ptr[]);
     int   x,y,z;  // Absolute into Builder->inst, with 0 predefined as a phony unused value (N/A).
-    union { int ix; float imm; };
+    union { int ptr; float imm; };
     union { Kind kind; int id; };
     _Bool live, loop_dependent, unused[2];
 } BInst;
@@ -40,19 +40,18 @@ typedef struct Builder {
 } Builder;
 
 #if defined(__clang__)
-    #define next __attribute__((musttail)) return ip[1].fn(ip+1,v+1, end,uni,var)
+    #define next __attribute__((musttail)) return ip[1].fn(ip+1,v+1,end,ptr)
 #else
-    #define next                           return ip[1].fn(ip+1,v+1, end,uni,var)
+    #define next                           return ip[1].fn(ip+1,v+1,end,ptr)
 #endif
 
-#define stage(name) int name##_(PInst const *ip, V32 *v, int end, float const *uni, float *var[])
+#define stage(name) int name##_(PInst const *ip, V32 *v, int end, float *ptr[])
 
 static stage(done) {
     (void)ip;
     (void)v;
     (void)end;
-    (void)uni;
-    (void)var;
+    (void)ptr;
     return 0;
 }
 
@@ -67,10 +66,10 @@ static int constant_fold(Builder *b, BInst inst) {
             {{b->inst[inst.z].imm}},
         };
         PInst ip[] = {
-            {.fn=inst.fn, .x=-3, .y=-2, .z=-1, .ix=inst.ix},
+            {.fn=inst.fn, .x=-3, .y=-2, .z=-1, .ptr=inst.ptr},
             {.fn=done_},
         };
-        ip->fn(ip,v+3,0,NULL,NULL);
+        ip->fn(ip,v+3,0,NULL);
         return splat(b, v[3].f[0]);
     }
     return 0;
@@ -143,33 +142,55 @@ Builder* builder(void) {
     return b;
 }
 
+static stage(thread_id) {
+#if K == 4
+    vector(int) iota = {0,1,2,3};
+#endif
+    if (end & (K-1)) { v->i = end - 1 + iota; }
+    else             { v->i = end - K + iota; }
+    next;
+}
+int thread_id(Builder *b) { return push(b, .fn=thread_id_, .kind=VARYING); }
+
 static stage(splat) {
     v->f = ( (vector(float)){0} + 1 ) * ip->imm;
     next;
 }
 int splat(Builder *b, float imm) { return push(b, .fn=splat_, .imm=imm, .kind=CONSTANT); }
 
-static stage(uniform) {
-    v->f = ( (vector(float)){0} + 1 ) * uni[ip->ix];
+static stage(load_uniform) {
+    float const *p = ptr[ip->ptr];
+    v->f = ( (vector(float)){0} + 1 ) * *p;
     next;
 }
-int uniform(Builder *b, int ix) { return push(b, .fn=uniform_, .ix=ix, .kind=UNIFORM); }
+static stage(load_contiguous) {
+    float const *p = ptr[ip->ptr];
+    if (end & (K-1)) { __builtin_memcpy(v, p + end - 1,   sizeof(float)); }
+    else             { __builtin_memcpy(v, p + end - K, K*sizeof(float)); }
+    next;
+}
 
-static stage(load) {
-    float const *ptr = var[ip->ix];
-    if (end & (K-1)) { __builtin_memcpy(v, ptr + end - 1,   sizeof(float)); }
-    else             { __builtin_memcpy(v, ptr + end - K, K*sizeof(float)); }
-    next;
+int load(Builder *b, int ptr, int ix) {
+    if (b->inst[ix].kind == CONSTANT && b->inst[ix].imm == 0.0f) {
+        // TODO: allow non-zero offset
+        return push(b, .fn=load_uniform_, .ptr=ptr, .kind=UNIFORM);
+    }
+    if (b->inst[ix].fn == thread_id_) {
+        return push(b, .fn=load_contiguous_, .ptr=ptr, .kind=VARYING);
+    }
+    // TODO: gather
+    __builtin_unreachable();
 }
-int load(Builder *b, int ix) { return push(b, .fn=load_, .ix=ix, .kind=VARYING); }
 
 static stage(store) {
-    float *ptr = var[ip->ix];
-    if (end & (K-1)) { __builtin_memcpy(ptr + end - 1, v+ip->x,   sizeof(float)); }
-    else             { __builtin_memcpy(ptr + end - K, v+ip->x, K*sizeof(float)); }
+    float *p = ptr[ip->ptr];
+    if (end & (K-1)) { __builtin_memcpy(p + end - 1, v+ip->x,   sizeof(float)); }
+    else             { __builtin_memcpy(p + end - K, v+ip->x, K*sizeof(float)); }
     next;
 }
-void store(Builder *b, int ix, int x) { push(b, .fn=store_, .ix=ix, .x=x, .kind=VARYING, .live=1); }
+void store(Builder *b, int ptr, int x) {
+    push(b, .fn=store_, .ptr=ptr, .x=x, .kind=VARYING, .live=1);
+}
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wfloat-equal"
@@ -282,11 +303,11 @@ Program* compile(Builder *b) {
             if (inst->live && inst->loop_dependent == loop) {
                 inst->id = p->insts++;
                 p->inst[inst->id] = (PInst) {
-                    .fn = inst->fn,
-                    .x  = b->inst[inst->x].id - inst->id,
-                    .y  = b->inst[inst->y].id - inst->id,
-                    .z  = b->inst[inst->z].id - inst->id,
-                    .ix = inst->ix,
+                    .fn  = inst->fn,
+                    .x   = b->inst[inst->x].id - inst->id,
+                    .y   = b->inst[inst->y].id - inst->id,
+                    .z   = b->inst[inst->z].id - inst->id,
+                    .ptr = inst->ptr,
                 };
             }
         }
@@ -299,15 +320,15 @@ Program* compile(Builder *b) {
     return p;
 }
 
-void execute(Program const *p, int n, float const *uniform, float *varying[]) {
+void execute(Program const *p, int n, float *ptr[]) {
     V32 *val = calloc((size_t)p->insts, sizeof *val);
 
     // This is loop-invariant hoisting: run first from the top, then any subsequent from p->loop.
     PInst const *ip = p->inst,  *loop = ip + p->loop;
     V32          *v = val    , *vloop =  v + p->loop;
 
-    for (int i = 0; i < n/K*K; i += K) { ip->fn(ip,v,i+K,uniform,varying); ip = loop; v = vloop; }
-    for (int i = n/K*K; i < n; i += 1) { ip->fn(ip,v,i+1,uniform,varying); ip = loop; v = vloop; }
+    for (int i = 0; i < n/K*K; i += K) { ip->fn(ip,v,i+K,ptr); ip = loop; v = vloop; }
+    for (int i = n/K*K; i < n; i += 1) { ip->fn(ip,v,i+1,ptr); ip = loop; v = vloop; }
 
     free(val);
 }
@@ -336,8 +357,8 @@ static void test_dead_code_elimination(void) {
 static void test_loop_hoisting(void) {
     Builder *b = builder();
     {
-        int x = load(b,0),
-            y = uniform(b,0),
+        int x = load(b,0,thread_id(b)),
+            y = load(b,0,splat(b,0.0f)),
             z = fadd(b,y,splat(b,1.0f)),
             w = fmul(b,x,z);
         store(b,0,w);
@@ -345,10 +366,10 @@ static void test_loop_hoisting(void) {
     Program *p = compile(b);
     expect(p->insts == 7);
     expect(p->loop  == 3);
-    expect(p->inst[0].fn == uniform_);
+    expect(p->inst[0].fn == load_uniform_);
     expect(p->inst[1].fn == splat_);
     expect(p->inst[2].fn == fadd_);
-    expect(p->inst[3].fn == load_);
+    expect(p->inst[3].fn == load_contiguous_);
     expect(p->inst[4].fn == fmul_);
     expect(p->inst[5].fn == store_);
     free(p);

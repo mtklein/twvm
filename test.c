@@ -12,208 +12,208 @@ static _Bool equiv(float x, float y) {
         || (x != x && y != y);
 }
 
-static void test(struct Builder *b, int n, float const *uni, float *var[], float const want[]) {
+static void test(struct Builder *b, int n, float *ptr[], float const want[]) {
     struct Program *p = compile(b);
-    execute(p,n,uni,var);
+    execute(p,n,ptr);
     free(p);
     for (int i = 0; i < n; i++) {
-        expect(equiv(var[0][i], want[i]));
+        expect(equiv(ptr[0][i], want[i]));
     }
 }
 
 static void test_fadd(void) {
     struct Builder *b = builder();
     {
-        int x = load(b,0),
-            y = load(b,1);
+        int x = load(b,0,thread_id(b)),
+            y = load(b,1,thread_id(b));
         store(b,0, fadd(b,x,y));
     }
     float v0[] = {1,2,3,4,5, 6},
           v1[] = {4,4,4,4,4, 4},
         want[] = {5,6,7,8,9,10};
-    test(b, len(v0), NULL, (float*[]){v0,v1}, want);
+    test(b, len(v0), (float*[]){v0,v1}, want);
 }
 
 static void test_fsub(void) {
     struct Builder *b = builder();
     {
-        int x = load(b,0),
-            y = load(b,1);
+        int x = load(b,0,thread_id(b)),
+            y = load(b,1,thread_id(b));
         store(b,0, fsub(b,x,y));
     }
     float v0[] = { 1, 2, 3, 4, 5, 6},
           v1[] = { 4, 4, 4, 4, 4, 4},
         want[] = {-3,-2,-1, 0, 1, 2};
-    test(b, len(v0), NULL, (float*[]){v0,v1}, want);
+    test(b, len(v0), (float*[]){v0,v1}, want);
 }
 
 static void test_fmul(void) {
     struct Builder *b = builder();
     {
-        int x = load(b,0),
-            y = load(b,1);
+        int x = load(b,0,thread_id(b)),
+            y = load(b,1,thread_id(b));
         store(b,0, fmul(b,x,y));
     }
     float v0[] = {1,2, 3, 4, 5, 6},
           v1[] = {4,4, 4, 4, 4, 4},
         want[] = {4,8,12,16,20,24};
-    test(b, len(v0), NULL, (float*[]){v0,v1}, want);
+    test(b, len(v0), (float*[]){v0,v1}, want);
 }
 
 static void test_fdiv(void) {
     struct Builder *b = builder();
     {
-        int x = load(b,0),
-            y = load(b,1);
+        int x = load(b,0,thread_id(b)),
+            y = load(b,1,thread_id(b));
         store(b,0, fdiv(b,x,y));
     }
     float v0[] = {   1,   2,    3,   4,    5,   6},
           v1[] = {   4,   4,    4,   4,    4,   4},
         want[] = {0.25, 0.5, 0.75, 1.0, 1.25, 1.5};
-    test(b, len(v0), NULL, (float*[]){v0,v1}, want);
+    test(b, len(v0), (float*[]){v0,v1}, want);
 }
 
 static void test_fmad(void) {
     struct Builder *b = builder();
     {
-        int x = load(b,0),
+        int x = load(b,0,thread_id(b)),
             y = fmad(b,x,x,splat(b,3.0f));
         store(b,0,y);
     }
     float v0[] = {1,2, 3, 4, 5, 6},
         want[] = {4,7,12,19,28,39};
-    test(b, len(v0), NULL, (float*[]){v0}, want);
+    test(b, len(v0), (float*[]){v0}, want);
 }
 
 
 static void test_feq(void) {
     struct Builder *b = builder();
     {
-        int x = load(b,0),
-            y = load(b,1);
+        int x = load(b,0,thread_id(b)),
+            y = load(b,1,thread_id(b));
         store(b,0, feq(b,x,y));
     }
     float const t = 0.0f/0.0f;
     float v0[] = {1,2,3,4,5,6},
           v1[] = {4,4,4,4,4,4},
         want[] = {0,0,0,t,0,0};
-    test(b, len(v0), NULL, (float*[]){v0,v1}, want);
+    test(b, len(v0), (float*[]){v0,v1}, want);
 }
 
 static void test_flt(void) {
     struct Builder *b = builder();
     {
-        int x = load(b,0),
-            y = load(b,1);
+        int x = load(b,0,thread_id(b)),
+            y = load(b,1,thread_id(b));
         store(b,0, flt(b,x,y));
     }
     float const t = 0.0f/0.0f;
     float v0[] = {1,2,3,4,5,6},
           v1[] = {4,4,4,4,4,4},
         want[] = {t,t,t,0,0,0};
-    test(b, len(v0), NULL, (float*[]){v0,v1}, want);
+    test(b, len(v0), (float*[]){v0,v1}, want);
 }
 
 static void test_fle(void) {
     struct Builder *b = builder();
     {
-        int x = load(b,0),
-            y = load(b,1);
+        int x = load(b,0,thread_id(b)),
+            y = load(b,1,thread_id(b));
         store(b,0, fle(b,x,y));
     }
     float const t = 0.0f/0.0f;
     float v0[] = {1,2,3,4,5,6},
           v1[] = {4,4,4,4,4,4},
         want[] = {t,t,t,t,0,0};
-    test(b, len(v0), NULL, (float*[]){v0,v1}, want);
+    test(b, len(v0), (float*[]){v0,v1}, want);
 }
 
 static void test_fgt(void) {
     struct Builder *b = builder();
     {
-        int x = load(b,0),
-            y = load(b,1);
+        int x = load(b,0,thread_id(b)),
+            y = load(b,1,thread_id(b));
         store(b,0, fgt(b,x,y));
     }
     float const t = 0.0f/0.0f;
     float v0[] = {1,2,3,4,5,6},
           v1[] = {4,4,4,4,4,4},
         want[] = {0,0,0,0,t,t};
-    test(b, len(v0), NULL, (float*[]){v0,v1}, want);
+    test(b, len(v0), (float*[]){v0,v1}, want);
 }
 
 static void test_fge(void) {
     struct Builder *b = builder();
     {
-        int x = load(b,0),
-            y = load(b,1);
+        int x = load(b,0,thread_id(b)),
+            y = load(b,1,thread_id(b));
         store(b,0, fge(b,x,y));
     }
     float const t = 0.0f/0.0f;
     float v0[] = {1,2,3,4,5,6},
           v1[] = {4,4,4,4,4,4},
         want[] = {0,0,0,t,t,t};
-    test(b, len(v0), NULL, (float*[]){v0,v1}, want);
+    test(b, len(v0), (float*[]){v0,v1}, want);
 }
 
 static void test_band(void) {
     struct Builder *b = builder();
     {
-        int x = load(b,0),
-            y = load(b,1);
+        int x = load(b,0,thread_id(b)),
+            y = load(b,1,thread_id(b));
         store(b,0, band(b,x,y));
     }
     float const t = 0.0f/0.0f;
     float v0[] = {0,0,t,t},
           v1[] = {0,t,0,t},
         want[] = {0,0,0,t};
-    test(b, len(v0), NULL, (float*[]){v0,v1}, want);
+    test(b, len(v0), (float*[]){v0,v1}, want);
 }
 
 static void test_bor(void) {
     struct Builder *b = builder();
     {
-        int x = load(b,0),
-            y = load(b,1);
+        int x = load(b,0,thread_id(b)),
+            y = load(b,1,thread_id(b));
         store(b,0, bor(b,x,y));
     }
     float const t = 0.0f/0.0f;
     float v0[] = {0,0,t,t},
           v1[] = {0,t,0,t},
         want[] = {0,t,t,t};
-    test(b, len(v0), NULL, (float*[]){v0,v1}, want);
+    test(b, len(v0), (float*[]){v0,v1}, want);
 }
 
 static void test_bxor(void) {
     struct Builder *b = builder();
     {
-        int x = load(b,0),
-            y = load(b,1);
+        int x = load(b,0,thread_id(b)),
+            y = load(b,1,thread_id(b));
         store(b,0, bxor(b,x,y));
     }
     float const t = 0.0f/0.0f;
     float v0[] = {0,0,t,t},
           v1[] = {0,t,0,t},
         want[] = {0,t,t,0};
-    test(b, len(v0), NULL, (float*[]){v0,v1}, want);
+    test(b, len(v0), (float*[]){v0,v1}, want);
 }
 
 static void test_mutate(void) {
     struct Builder *b = builder();
     {
-        int x = load(b,0);
+        int x = load(b,0,thread_id(b));
         mutate(b,&x,fmul(b,x,splat(b,3.0f)));
         store(b,0,x);
     }
     float v0[] = {1,2,3, 4, 5, 6},
         want[] = {3,6,9,12,15,18};
-    test(b, len(v0), NULL, (float*[]){v0}, want);
+    test(b, len(v0), (float*[]){v0}, want);
 }
 
 static void test_jump(void) {
     struct Builder *b = builder();
     {
-        int x = load(b,0);
+        int x = load(b,0,thread_id(b));
         {
             int cond = fgt (b,x,splat(b,0.0f)),
                 newx = bsel(b,cond
@@ -226,13 +226,13 @@ static void test_jump(void) {
     }
     float v0[] = {1,2,3,4,5,6},
         want[] = {0,0,0,0,0,0};
-    test(b, len(v0), NULL, (float*[]){v0}, want);
+    test(b, len(v0), (float*[]){v0}, want);
 }
 
 static void test_dce(void) {
     struct Builder *b = builder();
     {
-        int x = load(b,0),
+        int x = load(b,0,thread_id(b)),
             y = fmul(b,x,x),
             z = fadd(b,x,x),
             w = fsub(b,z,x);
@@ -241,14 +241,14 @@ static void test_dce(void) {
     }
     float v0[] = {1,2,3,4,5,6},
         want[] = {1,2,3,4,5,6};
-    test(b, len(v0), NULL, (float*[]){v0}, want);
+    test(b, len(v0), (float*[]){v0}, want);
 }
 
 static void test_uni(void) {
     struct Builder *b = builder();
     {
-        int x = load(b,0),
-            y = uniform(b,0),
+        int x = load(b,0,thread_id(b)),
+            y = load(b,1,splat(b,0.0f)),
             z = fadd(b,y,splat(b,1.0f)),
             w = fmul(b,x,z);
         store(b,0,w);
@@ -256,13 +256,13 @@ static void test_uni(void) {
     float uni = 3.0f,
          v0[] = {1,2, 3, 4, 5, 6},
        want[] = {4,8,12,16,20,24};
-    test(b, len(v0), &uni, (float*[]){v0}, want);
+    test(b, len(v0), (float*[]){v0,&uni}, want);
 }
 
 static void test_cse(void) {
     struct Builder *b = builder();
     {
-        int x = load(b,0),
+        int x = load(b,0,thread_id(b)),
             y = fmul(b,x,x),
             z = fmul(b,x,x);
         expect(y == z);
@@ -283,7 +283,7 @@ static void test_more_cse(void) {
 static void test_no_cse(void) {
     struct Builder *b = builder();
     {
-        int x = load(b,0),
+        int x = load(b,0,thread_id(b)),
             y = fmul(b,x,x);
         mutate(b, &x, y);
         int z = fmul(b,x,x);
@@ -295,7 +295,7 @@ static void test_no_cse(void) {
 static void test_cse_sort(void) {
     struct Builder *b = builder();
      {
-        int x = load (b,0),
+        int x = load (b,0,thread_id(b)),
             c = splat(b,2.0f),
             y = fmul (b,x,c),
             k = splat(b,2.0f),
@@ -309,13 +309,48 @@ static void test_cse_sort(void) {
 static void test_cse_no_sort(void) {
     struct Builder *b = builder();
      {
-        int x = load (b,0),
+        int x = load (b,0,thread_id(b)),
             c = splat(b,2.0f),
             y = fdiv (b,x,c),
             k = splat(b,2.0f),
             z = fdiv (b,k,x);
         expect(c == k);
         expect(y != z);
+    }
+    free(compile(b));
+}
+
+static void test_thread_id_cse(void) {
+    struct Builder *b = builder();
+    {
+        int x = thread_id(b),
+            y = thread_id(b);
+    #if 0  // TODO
+        expect(x == y);
+    #else
+        (void)x;
+        (void)y;
+    #endif
+    }
+    free(compile(b));
+}
+
+static void test_uniform_load_cse(void) {
+    struct Builder *b = builder();
+    {
+        int x = load(b,0, splat(b,0.0f)),
+            y = load(b,0, splat(b,0.0f));
+        expect(x == y);
+    }
+    free(compile(b));
+}
+
+static void test_varying_load_no_cse(void) {
+    struct Builder *b = builder();
+    {
+        int x = load(b,0, thread_id(b)),
+            y = load(b,0, thread_id(b));
+        expect(x != y);
     }
     free(compile(b));
 }
@@ -349,5 +384,9 @@ int main(void) {
     test_no_cse();
     test_cse_sort();
     test_cse_no_sort();
+
+    test_thread_id_cse();
+    test_uniform_load_cse();
+    test_varying_load_no_cse();
     return 0;
 }

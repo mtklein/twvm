@@ -2,12 +2,13 @@
 
 struct Builder* builder(void);
 struct Program* compile(struct Builder*);
-void            execute(struct Program const*, int n, float const *uniform, float *varying[]);
+void            execute(struct Program const*, int n, float *ptr[]);
 
-int  splat  (struct Builder*, float);
-int  uniform(struct Builder*, int ix);
-int  load   (struct Builder*, int ix);
-void store  (struct Builder*, int ix, int val);
+int thread_id(struct Builder*);
+
+int  splat(struct Builder*, float);
+int  load (struct Builder*, int ptr, int ix);
+void store(struct Builder*, int ptr, int val);
 
 int fadd(struct Builder*, int,int);
 int fsub(struct Builder*, int,int);
