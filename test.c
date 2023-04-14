@@ -5,6 +5,10 @@
 
 void internal_tests(void);
 
+static void test_nothing(void) {
+    free(compile(builder()));
+}
+
 static _Bool equiv(float x, float y) {
     return (x <= y && y <= x)
         || (x != x && y != y);
@@ -260,6 +264,8 @@ static void test_uniform_load(void) {
 
 int main(void) {
     internal_tests();
+
+    test_nothing();
 
     test_fadd();
     test_fsub();
