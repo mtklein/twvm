@@ -18,7 +18,7 @@ typedef struct PInst {
     union { int ix; float imm; };
 } PInst;
 
-typedef enum { MATH,CONST,UNIFORM,VARYING } Kind;
+typedef enum { UNKNOWN,CONSTANT,UNIFORM,VARYING } Kind;
 
 typedef struct BInst {
     int (*fn)(struct PInst const *ip, V32 *v, int end, float const *uni, float *var[]);
@@ -58,9 +58,9 @@ static stage(done) {
 
 // Constant folding: math on constants produces a constant.
 static int constant_fold(Builder *b, BInst inst) {
-    if (inst.kind == MATH && b->inst[inst.x].kind == CONST
-                          && b->inst[inst.y].kind == CONST
-                          && b->inst[inst.z].kind == CONST) {
+    if (inst.kind == UNKNOWN && b->inst[inst.x].kind == CONSTANT
+                             && b->inst[inst.y].kind == CONSTANT
+                             && b->inst[inst.z].kind == CONSTANT) {
         V32 v[4] = {
             {{b->inst[inst.x].imm}},
             {{b->inst[inst.y].imm}},
@@ -136,10 +136,10 @@ Builder* builder(void) {
     Builder *b = calloc(1, sizeof *b);
     // A phony BInst as id=0 lets us assume every BInst's children x,y,z always exist
     // (including even the phony instruction's children, each pointing back to id=0 itself).
-    //    .fn=NULL    makes execute() crash should we forget to skip this instruction in compile();
-    //    .kind=CONST lets constant_fold() tolerate this silently as an (unused) constant input;
-    //    .live=1     prevents us from inserting id=0 into our common subexpression hash table.
-    push(b, .fn=NULL, .kind=CONST, .live=1);
+    //    .fn=NULL       crashes execute() if we forget to skip this instruction in compile();
+    //    .kind=CONSTANT lets constant_fold() tolerate this silently as an (unused) input;
+    //    .live=1        stops us from inserting id=0 into our common subexpression hash table.
+    push(b, .fn=NULL, .kind=CONSTANT, .live=1);
     return b;
 }
 
@@ -147,7 +147,7 @@ static stage(splat) {
     v->f = ( (vector(float)){0} + 1 ) * ip->imm;
     next;
 }
-int splat(Builder *b, float imm) { return push(b, .fn=splat_, .imm=imm, .kind=CONST); }
+int splat(Builder *b, float imm) { return push(b, .fn=splat_, .imm=imm, .kind=CONSTANT); }
 
 static stage(uniform) {
     v->f = ( (vector(float)){0} + 1 ) * uni[ip->ix];
