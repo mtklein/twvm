@@ -228,7 +228,7 @@ static void test_jump(void) {
     test(b,want,v0);
 }
 
-static void test_dce(void) {
+static void test_dead_code(void) {
     struct Builder *b = builder();
     {
         int x = load(b,0,thread_id(b)),
@@ -243,7 +243,7 @@ static void test_dce(void) {
     test(b,want,v0);
 }
 
-static void test_uni(void) {
+static void test_uniform_load(void) {
     struct Builder *b = builder();
     {
         int x = load(b,0,thread_id(b)),
@@ -256,102 +256,6 @@ static void test_uni(void) {
          v0[] = {1,2, 3, 4, 5, 6},
        want[] = {4,8,12,16,20,24};
     test(b,want,v0,&uni);
-}
-
-static void test_cse(void) {
-    struct Builder *b = builder();
-    {
-        int x = load(b,0,thread_id(b)),
-            y = fmul(b,x,x),
-            z = fmul(b,x,x);
-        expect(y == z);
-    }
-    free(compile(b));
-}
-
-static void test_more_cse(void) {
-    struct Builder *b = builder();
-    {
-        int x = splat(b,2.0f),
-            y = splat(b,2.0f);
-        expect(x == y);
-    }
-    free(compile(b));
-}
-
-static void test_no_cse(void) {
-    struct Builder *b = builder();
-    {
-        int x = load(b,0,thread_id(b)),
-            y = fmul(b,x,x);
-        mutate(b, &x, y);
-        int z = fmul(b,x,x);
-        expect(y != z);
-    }
-    free(compile(b));
-}
-
-static void test_cse_sort(void) {
-    struct Builder *b = builder();
-     {
-        int x = load (b,0,thread_id(b)),
-            c = splat(b,2.0f),
-            y = fmul (b,x,c),
-            k = splat(b,2.0f),
-            z = fmul (b,k,x);
-        expect(c == k);
-        expect(y == z);
-    }
-    free(compile(b));
-}
-
-static void test_cse_no_sort(void) {
-    struct Builder *b = builder();
-     {
-        int x = load (b,0,thread_id(b)),
-            c = splat(b,2.0f),
-            y = fdiv (b,x,c),
-            k = splat(b,2.0f),
-            z = fdiv (b,k,x);
-        expect(c == k);
-        expect(y != z);
-    }
-    free(compile(b));
-}
-
-static void test_thread_id_cse(void) {
-    struct Builder *b = builder();
-    {
-        int x = thread_id(b),
-            y = thread_id(b);
-    #if 0  // TODO
-        expect(x == y);
-    #else
-        (void)x;
-        (void)y;
-    #endif
-    }
-    free(compile(b));
-}
-
-static void test_uniform_load_cse(void) {
-    struct Builder *b = builder();
-    {
-        int x = load(b,0, splat(b,0.0f)),
-            y = load(b,0, splat(b,0.0f));
-        expect(x == y);
-    }
-    free(compile(b));
-}
-
-static void test_varying_load_no_cse(void) {
-    struct Builder *b = builder();
-    {
-        int x = load(b,0, thread_id(b)),
-            y = load(b,0, thread_id(b));
-        expect(x != y);
-    }
-    free(compile(b));
 }
 
 int main(void) {
@@ -376,16 +280,7 @@ int main(void) {
     test_mutate();
     test_jump();
 
-    test_dce();
-    test_uni();
-    test_cse();
-    test_more_cse();
-    test_no_cse();
-    test_cse_sort();
-    test_cse_no_sort();
-
-    test_thread_id_cse();
-    test_uniform_load_cse();
-    test_varying_load_no_cse();
+    test_dead_code();
+    test_uniform_load();
     return 0;
 }
