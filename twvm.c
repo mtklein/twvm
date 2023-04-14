@@ -30,11 +30,6 @@ typedef struct BInst {
     union { Eval eval; int id; };
 } BInst;
 
-typedef struct Entry {
-    unsigned hash;
-    int      id;
-} Entry;
-
 typedef struct Builder {
     BInst       *inst;
     int          insts,unused;
