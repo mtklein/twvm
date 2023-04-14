@@ -18,13 +18,13 @@ typedef struct PInst {
     union { int ptr; float imm; };
 } PInst;
 
-typedef enum { UNKNOWN,CONSTANT,UNIFORM,VARYING } Kind;
+typedef enum { UNKNOWN,CONSTANT,UNIFORM,VARYING } Shape;
 
 typedef struct BInst {
     int (*fn)(struct PInst const *ip, V32 *v, int end, float *ptr[]);
     int   x,y,z;  // Absolute into Builder->inst, with 0 predefined as a phony unused value (N/A).
     union { int ptr; float imm; };
-    union { Kind kind; int id; };
+    union { Shape shape; int id; };
     _Bool live, loop_dependent, unused[2];
 } BInst;
 
@@ -57,9 +57,9 @@ static stage(done) {
 
 // Constant folding: math on constants produces a constant.
 static int constant_fold(Builder *b, BInst inst) {
-    if (inst.kind == UNKNOWN && b->inst[inst.x].kind == CONSTANT
-                             && b->inst[inst.y].kind == CONSTANT
-                             && b->inst[inst.z].kind == CONSTANT) {
+    if (inst.shape == UNKNOWN && b->inst[inst.x].shape == CONSTANT
+                              && b->inst[inst.y].shape == CONSTANT
+                              && b->inst[inst.z].shape == CONSTANT) {
         V32 v[4] = {
             {{b->inst[inst.x].imm}},
             {{b->inst[inst.y].imm}},
@@ -113,7 +113,7 @@ static int push_(Builder *b, BInst const inst) {
     }
     int const id = b->insts++;
     b->inst[id] = inst;
-    if (inst.kind < VARYING && !inst.live) {
+    if (inst.shape < VARYING && !inst.live) {
         b->cse = hash_insert(b->cse, hash, id);
     }
     return id;
@@ -134,8 +134,8 @@ static int sort_(Builder *b, BInst inst) {
 Builder* builder(void) {
     Builder *b = calloc(1, sizeof *b);
     // A phony instruction as id=0 lets us assume that every BInst's inputs (x,y,z) always exist,
-    // tagged to pass .kind==CONSTANT checks in constant_fold().
-    push(b, .fn=NULL, .kind=CONSTANT);
+    // tagged to pass .shape==CONSTANT checks in constant_fold().
+    push(b, .fn=NULL, .shape=CONSTANT);
     return b;
 }
 
@@ -147,13 +147,13 @@ static stage(thread_id) {
     else             { v->i = end - K + iota; }
     next;
 }
-int thread_id(Builder *b) { return push(b, .fn=thread_id_, .kind=VARYING); }
+int thread_id(Builder *b) { return push(b, .fn=thread_id_, .shape=VARYING); }
 
 static stage(splat) {
     v->f = ( (vector(float)){0} + 1 ) * ip->imm;
     next;
 }
-int splat(Builder *b, float imm) { return push(b, .fn=splat_, .imm=imm, .kind=CONSTANT); }
+int splat(Builder *b, float imm) { return push(b, .fn=splat_, .imm=imm, .shape=CONSTANT); }
 
 static stage(load_uniform) {
     float const *p = ptr[ip->ptr];
@@ -168,12 +168,12 @@ static stage(load_contiguous) {
 }
 
 int load(Builder *b, int ptr, int ix) {
-    if (b->inst[ix].kind == CONSTANT && b->inst[ix].imm == 0.0f) {
+    if (b->inst[ix].shape == CONSTANT && b->inst[ix].imm == 0.0f) {
         // TODO: allow non-zero offset
-        return push(b, .fn=load_uniform_, .ptr=ptr, .kind=UNIFORM);
+        return push(b, .fn=load_uniform_, .ptr=ptr, .shape=UNIFORM);
     }
     if (b->inst[ix].fn == thread_id_) {
-        return push(b, .fn=load_contiguous_, .ptr=ptr, .kind=VARYING);
+        return push(b, .fn=load_contiguous_, .ptr=ptr, .shape=VARYING);
     }
     // TODO: gather
     __builtin_unreachable();
@@ -186,7 +186,7 @@ static stage(store) {
     next;
 }
 void store(Builder *b, int ptr, int x) {
-    push(b, .fn=store_, .ptr=ptr, .x=x, .kind=VARYING, .live=1);
+    push(b, .fn=store_, .ptr=ptr, .x=x, .shape=VARYING, .live=1);
 }
 
 #pragma GCC diagnostic push
@@ -263,7 +263,7 @@ typedef struct Program {
 #define backward(elt,arr) for (__typeof__(arr) elt = arr + arr##s; elt --> arr;)
 
 Program* compile(Builder *b) {
-    push(b, .fn=done_, .kind=VARYING, .live=1);
+    push(b, .fn=done_, .shape=VARYING, .live=1);
 
     // Dead code elimination: mark inputs to live instructions as live.
     int live = 0;
@@ -286,7 +286,7 @@ Program* compile(Builder *b) {
     // Loop-invariant hoisting: constant and uniform instructions can run once,
     // but anything affected by a varying is loop-dependent.
     forward(inst, b->inst) {
-        if (inst->kind == VARYING
+        if (inst->shape == VARYING
                 || (b->inst[inst->x].loop_dependent)
                 || (b->inst[inst->y].loop_dependent)
                 || (b->inst[inst->z].loop_dependent)) {
