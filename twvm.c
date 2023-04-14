@@ -18,12 +18,12 @@ typedef struct PInst {
     union { int ptr; float imm; };
 } PInst;
 
-typedef enum { UNKNOWN,CONSTANT,UNIFORM,VARYING } Shape;
+typedef enum { CONSTANT,UNIFORM,VARYING } Shape;
 typedef enum { CSE,NO_CSE,LIVE} Eval;
 
 typedef struct BInst {
     int (*fn)(struct PInst const *ip, V32 *v, int end, float *ptr[]);
-    int   x,y,z;  // Absolute into Builder->inst, with 0 predefined as a phony unused value (N/A).
+    int   x,y,z;  // Absolute into b->inst, with id=0 predefined as a phony value (N/A).
     union { int ptr; float imm; };
 
     Shape shape;
@@ -41,6 +41,14 @@ typedef struct Builder {
     struct hash *cse;
 } Builder;
 
+Builder* builder(void) {
+    Builder *b = calloc(1, sizeof *b);
+    // A phony instruction at id=0 lets us assume that every BInst's inputs (x,y,z) always exist.
+    b->inst  = calloc(1, sizeof *b->inst);
+    b->insts = 1;
+    return b;
+}
+
 #if defined(__clang__)
     #define next __attribute__((musttail)) return ip[1].fn(ip+1,v+1,end,ptr)
 #else
@@ -57,11 +65,8 @@ static stage(done) {
     return 0;
 }
 
-// Constant folding: math on constants produces a constant.
 static int constant_fold(Builder *b, BInst inst) {
-    if (inst.shape == UNKNOWN && b->inst[inst.x].shape == CONSTANT
-                              && b->inst[inst.y].shape == CONSTANT
-                              && b->inst[inst.z].shape == CONSTANT) {
+    if (inst.shape == CONSTANT && (inst.x || inst.y || inst.z)) {
         V32 v[4] = {
             {{b->inst[inst.x].imm}},
             {{b->inst[inst.y].imm}},
@@ -77,12 +82,12 @@ static int constant_fold(Builder *b, BInst inst) {
     return 0;
 }
 
-// Common sub-expression elimination: have we seen this same instruction before?
 typedef struct {
     Builder const *b;
     BInst   const *want;
     int            id, unused;
 } MatchCtx;
+
 static _Bool cse_match(int val, void *vctx) {
     MatchCtx *ctx = vctx;
     if (0 == __builtin_memcmp(ctx->want, ctx->b->inst+val, sizeof *ctx->want)) {
@@ -102,7 +107,11 @@ static unsigned fnv1a(void const *v, size_t len) {
     return hash;
 }
 
-static int push_(Builder *b, BInst const inst) {
+static int push_(Builder *b, BInst inst) {
+    if (inst.shape < b->inst[inst.x].shape) { inst.shape = b->inst[inst.x].shape; }
+    if (inst.shape < b->inst[inst.y].shape) { inst.shape = b->inst[inst.y].shape; }
+    if (inst.shape < b->inst[inst.z].shape) { inst.shape = b->inst[inst.z].shape; }
+
     for (int id = constant_fold(b,inst); id;) {
         return id;
     }
@@ -113,7 +122,7 @@ static int push_(Builder *b, BInst const inst) {
     }
 
     if ((b->insts & (b->insts-1)) == 0) {
-        b->inst = realloc(b->inst, (size_t)(b->insts ? b->insts * 2 : 1) * sizeof *b->inst);
+        b->inst = realloc(b->inst, 2 * (size_t)b->insts * sizeof *b->inst);
     }
     int const id = b->insts++;
     b->inst[id] = inst;
@@ -136,14 +145,6 @@ static int sort_(Builder *b, BInst inst) {
 }
 #define sort(b,...) sort_(b, (BInst){__VA_ARGS__})
 
-Builder* builder(void) {
-    Builder *b = calloc(1, sizeof *b);
-    // A phony instruction as id=0 lets us assume that every BInst's inputs (x,y,z) always exist,
-    // tagged to pass .shape==CONSTANT checks in constant_fold().
-    push(b, .fn=NULL, .shape=CONSTANT);
-    return b;
-}
-
 static stage(thread_id) {
 #if K == 4
     vector(int) iota = {0,1,2,3};
@@ -158,7 +159,7 @@ static stage(splat) {
     v->f = ( (vector(float)){0} + 1 ) * ip->imm;
     next;
 }
-int splat(Builder *b, float imm) { return push(b, .fn=splat_, .imm=imm, .shape=CONSTANT); }
+int splat(Builder *b, float imm) { return push(b, .fn=splat_, .imm=imm); }
 
 static stage(load_uniform) {
     float const *p = ptr[ip->ptr];
@@ -271,7 +272,6 @@ typedef struct Program {
 Program* compile(Builder *b) {
     push(b, .fn=done_, .shape=VARYING, .eval=LIVE);
 
-    // Dead code elimination: mark inputs to live instructions as live.
     backward(inst, b->inst) {
         if (inst->eval == LIVE) {
             b->inst[inst->x].eval = LIVE;
@@ -290,16 +290,6 @@ Program* compile(Builder *b) {
     }
 
     Program *p = calloc(1, sizeof *p + (size_t)live * sizeof *b->inst);
-
-    // Loop-invariant hoisting: constant and uniform instructions can run once,
-    // but anything affected by a varying is loop-dependent.
-    forward(inst, b->inst) {
-        if (b->inst[inst->x].shape == VARYING ||
-            b->inst[inst->y].shape == VARYING ||
-            b->inst[inst->z].shape == VARYING) {
-            inst->shape = VARYING;
-        }
-    }
 
     for (int loop = 0; loop < 2; loop++) {
         p->loop = p->insts;
@@ -327,7 +317,6 @@ Program* compile(Builder *b) {
 void execute(Program const *p, int n, float *ptr[]) {
     V32 *val = calloc((size_t)p->insts, sizeof *val);
 
-    // This is loop-invariant hoisting: run first from the top, then any subsequent from p->loop.
     PInst const *ip = p->inst,  *loop = ip + p->loop;
     V32          *v = val    , *vloop =  v + p->loop;
 
