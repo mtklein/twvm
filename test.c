@@ -5,14 +5,12 @@
 
 void internal_tests(void);
 
-#define len(x) (int)(sizeof(x) / sizeof(0[x]))
-
 static _Bool equiv(float x, float y) {
     return (x <= y && y <= x)
         || (x != x && y != y);
 }
 
-static void test(struct Builder *b, int n, float *ptr[], float const want[]) {
+static void test_(struct Builder *b, float const want[], int n, float *ptr[]) {
     struct Program *p = compile(b);
     execute(p,n,ptr);
     free(p);
@@ -20,6 +18,7 @@ static void test(struct Builder *b, int n, float *ptr[], float const want[]) {
         expect(equiv(ptr[0][i], want[i]));
     }
 }
+#define test(b,want,...) test_(b,want,sizeof(want)/sizeof(0[want]), (float*[]){__VA_ARGS__})
 
 static void test_fadd(void) {
     struct Builder *b = builder();
@@ -31,7 +30,7 @@ static void test_fadd(void) {
     float v0[] = {1,2,3,4,5, 6},
           v1[] = {4,4,4,4,4, 4},
         want[] = {5,6,7,8,9,10};
-    test(b, len(v0), (float*[]){v0,v1}, want);
+    test(b,want,v0,v1);
 }
 
 static void test_fsub(void) {
@@ -44,7 +43,7 @@ static void test_fsub(void) {
     float v0[] = { 1, 2, 3, 4, 5, 6},
           v1[] = { 4, 4, 4, 4, 4, 4},
         want[] = {-3,-2,-1, 0, 1, 2};
-    test(b, len(v0), (float*[]){v0,v1}, want);
+    test(b,want,v0,v1);
 }
 
 static void test_fmul(void) {
@@ -57,7 +56,7 @@ static void test_fmul(void) {
     float v0[] = {1,2, 3, 4, 5, 6},
           v1[] = {4,4, 4, 4, 4, 4},
         want[] = {4,8,12,16,20,24};
-    test(b, len(v0), (float*[]){v0,v1}, want);
+    test(b,want,v0,v1);
 }
 
 static void test_fdiv(void) {
@@ -70,7 +69,7 @@ static void test_fdiv(void) {
     float v0[] = {   1,   2,    3,   4,    5,   6},
           v1[] = {   4,   4,    4,   4,    4,   4},
         want[] = {0.25, 0.5, 0.75, 1.0, 1.25, 1.5};
-    test(b, len(v0), (float*[]){v0,v1}, want);
+    test(b,want,v0,v1);
 }
 
 static void test_fmad(void) {
@@ -82,7 +81,7 @@ static void test_fmad(void) {
     }
     float v0[] = {1,2, 3, 4, 5, 6},
         want[] = {4,7,12,19,28,39};
-    test(b, len(v0), (float*[]){v0}, want);
+    test(b,want,v0);
 }
 
 
@@ -97,7 +96,7 @@ static void test_feq(void) {
     float v0[] = {1,2,3,4,5,6},
           v1[] = {4,4,4,4,4,4},
         want[] = {0,0,0,t,0,0};
-    test(b, len(v0), (float*[]){v0,v1}, want);
+    test(b,want,v0,v1);
 }
 
 static void test_flt(void) {
@@ -111,7 +110,7 @@ static void test_flt(void) {
     float v0[] = {1,2,3,4,5,6},
           v1[] = {4,4,4,4,4,4},
         want[] = {t,t,t,0,0,0};
-    test(b, len(v0), (float*[]){v0,v1}, want);
+    test(b,want,v0,v1);
 }
 
 static void test_fle(void) {
@@ -125,7 +124,7 @@ static void test_fle(void) {
     float v0[] = {1,2,3,4,5,6},
           v1[] = {4,4,4,4,4,4},
         want[] = {t,t,t,t,0,0};
-    test(b, len(v0), (float*[]){v0,v1}, want);
+    test(b,want,v0,v1);
 }
 
 static void test_fgt(void) {
@@ -139,7 +138,7 @@ static void test_fgt(void) {
     float v0[] = {1,2,3,4,5,6},
           v1[] = {4,4,4,4,4,4},
         want[] = {0,0,0,0,t,t};
-    test(b, len(v0), (float*[]){v0,v1}, want);
+    test(b,want,v0,v1);
 }
 
 static void test_fge(void) {
@@ -153,7 +152,7 @@ static void test_fge(void) {
     float v0[] = {1,2,3,4,5,6},
           v1[] = {4,4,4,4,4,4},
         want[] = {0,0,0,t,t,t};
-    test(b, len(v0), (float*[]){v0,v1}, want);
+    test(b,want,v0,v1);
 }
 
 static void test_band(void) {
@@ -167,7 +166,7 @@ static void test_band(void) {
     float v0[] = {0,0,t,t},
           v1[] = {0,t,0,t},
         want[] = {0,0,0,t};
-    test(b, len(v0), (float*[]){v0,v1}, want);
+    test(b,want,v0,v1);
 }
 
 static void test_bor(void) {
@@ -181,7 +180,7 @@ static void test_bor(void) {
     float v0[] = {0,0,t,t},
           v1[] = {0,t,0,t},
         want[] = {0,t,t,t};
-    test(b, len(v0), (float*[]){v0,v1}, want);
+    test(b,want,v0,v1);
 }
 
 static void test_bxor(void) {
@@ -195,7 +194,7 @@ static void test_bxor(void) {
     float v0[] = {0,0,t,t},
           v1[] = {0,t,0,t},
         want[] = {0,t,t,0};
-    test(b, len(v0), (float*[]){v0,v1}, want);
+    test(b,want,v0,v1);
 }
 
 static void test_mutate(void) {
@@ -207,7 +206,7 @@ static void test_mutate(void) {
     }
     float v0[] = {1,2,3, 4, 5, 6},
         want[] = {3,6,9,12,15,18};
-    test(b, len(v0), (float*[]){v0}, want);
+    test(b,want,v0);
 }
 
 static void test_jump(void) {
@@ -226,7 +225,7 @@ static void test_jump(void) {
     }
     float v0[] = {1,2,3,4,5,6},
         want[] = {0,0,0,0,0,0};
-    test(b, len(v0), (float*[]){v0}, want);
+    test(b,want,v0);
 }
 
 static void test_dce(void) {
@@ -241,7 +240,7 @@ static void test_dce(void) {
     }
     float v0[] = {1,2,3,4,5,6},
         want[] = {1,2,3,4,5,6};
-    test(b, len(v0), (float*[]){v0}, want);
+    test(b,want,v0);
 }
 
 static void test_uni(void) {
@@ -256,7 +255,7 @@ static void test_uni(void) {
     float uni = 3.0f,
          v0[] = {1,2, 3, 4, 5, 6},
        want[] = {4,8,12,16,20,24};
-    test(b, len(v0), (float*[]){v0,&uni}, want);
+    test(b,want,v0,&uni);
 }
 
 static void test_cse(void) {
