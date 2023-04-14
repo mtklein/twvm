@@ -26,8 +26,10 @@ typedef struct BInst {
     int   x,y,z;  // Absolute into b->inst, with id=0 predefined as a phony value (N/A).
     union { int ptr; float imm; };
 
-    Shape shape;
-    union { Eval eval; int id; };
+    Shape shape  :  2;
+    Eval  eval   :  2;
+    int   unused : 28;
+    int   id;
 } BInst;
 
 typedef struct Builder {
@@ -277,8 +279,8 @@ typedef struct Program {
 Program* compile(Builder *b) {
     push(b, .fn=done_, .shape=VARYING, .eval=LIVE);
 
-    // Dead code elimination: the inputs of live instructions are live.
-    // Mark dead by fn=NULL, both letting us union eval/id, and handling the id=0 phony naturally.
+    // Dead code elimination: the inputs of live instructions are live, and anything else is dead.
+    // Marking dead instructions with fn=NULL handles the phony id=0 instruction naturally.
     int live = 0;
     backward(inst, b->inst) {
         if (inst->eval == LIVE) {
