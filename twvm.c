@@ -147,10 +147,10 @@ static int sort_(Builder *b, BInst inst) {
 
 static stage(thread_id) {
 #if K == 4
-    vector(int) iota = {0,1,2,3};
+    vector(float) iota = {0,1,2,3};
 #endif
-    if (end & (K-1)) { v->i = end - 1 + iota; }
-    else             { v->i = end - K + iota; }
+    if (end & (K-1)) { v->f = (float)end - 1 + iota; }
+    else             { v->f = (float)end - K + iota; }
     next;
 }
 int thread_id(Builder *b) { return push(b, .fn=thread_id_, .shape=VARYING); }
@@ -162,8 +162,9 @@ static stage(splat) {
 int splat(Builder *b, float imm) { return push(b, .fn=splat_, .imm=imm); }
 
 static stage(load_uniform) {
-    float const *p = ptr[ip->ptr];
-    v->f = ( (vector(float)){0} + 1 ) * *p;
+    float const *p = ptr[ip->ptr],
+                ix = v[ip->x].f[0];
+    v->f = ( (vector(float)){0} + 1 ) * p[(int)ix];
     next;
 }
 static stage(load_contiguous) {
@@ -172,18 +173,23 @@ static stage(load_contiguous) {
     else             { __builtin_memcpy(v, p + end - K, K*sizeof(float)); }
     next;
 }
+static stage(load_gather) {
+    float const   *p = ptr[ip->ptr];
+    vector(float) ix = v[ip->x].f;
+    for (int i = 0; i < K; i++) {
+        v->f[i] = p[(int)ix[i]];
+    }
+    next;
+}
 
 int load(Builder *b, int ptr, int ix) {
-    if (b->inst[ix].shape == CONSTANT && b->inst[ix].imm == 0.0f) {
-        // TODO: allow non-zero offset
-        // TODO: allow any uniform offset
-        return push(b, .fn=load_uniform_, .ptr=ptr, .shape=UNIFORM);
+    if (b->inst[ix].shape <= UNIFORM) {
+        return push(b, .fn=load_uniform_, .ptr=ptr, .x=ix, .shape=UNIFORM);
     }
     if (b->inst[ix].fn == thread_id_) {
         return push(b, .fn=load_contiguous_, .ptr=ptr, .shape=VARYING, .eval=NO_CSE);
     }
-    // TODO: gather
-    __builtin_unreachable();
+    return push(b, .fn=load_gather_, .ptr=ptr, .x=ix, .shape=VARYING, .eval=NO_CSE);
 }
 
 static stage(store) {
@@ -356,14 +362,15 @@ static void test_loop_hoisting(void) {
         store(b,0,w);
     }
     Program *p = compile(b);
-    expect(p->insts == 7);
-    expect(p->loop  == 3);
-    expect(p->inst[0].fn == load_uniform_);
-    expect(p->inst[1].fn == splat_);
-    expect(p->inst[2].fn == fadd_);
-    expect(p->inst[3].fn == load_contiguous_);
-    expect(p->inst[4].fn == fmul_);
-    expect(p->inst[5].fn == store_);
+    expect(p->insts == 8);
+    expect(p->loop  == 4);
+    expect(p->inst[0].fn == splat_ && p->inst[0].imm == 0.0f);
+    expect(p->inst[1].fn == load_uniform_);
+    expect(p->inst[2].fn == splat_ && p->inst[2].imm == 1.0f);
+    expect(p->inst[3].fn == fadd_);
+    expect(p->inst[4].fn == load_contiguous_);
+    expect(p->inst[5].fn == fmul_);
+    expect(p->inst[6].fn == store_);
     free(p);
 }
 

@@ -263,6 +263,43 @@ static void test_uniform_load(void) {
     test(b,want,v0,&uni);
 }
 
+static void test_thread_id(void) {
+    struct Builder *b = builder();
+    {
+        store(b,0, fmul(b, thread_id(b), splat(b,2.0f)));
+    }
+    float v0[] = {0,0,0,0,0, 0, 0},
+        want[] = {0,2,4,6,8,10,12};
+    test(b,want,v0);
+}
+
+static void test_complex_uniforms(void) {
+    struct Builder *b = builder();
+    {
+        int x = load(b,1, splat(b,1.0f)),   // load uniform x =           uni[1] == 6.0f
+            y = load(b,1, x),               // load uniform y = uni[x] == uni[6] == 9.0f
+            z = load(b,0, thread_id(b));    // load varying z = v0
+        store(b,0, fmul(b,y,z));            // store varying v0 = y*z == 9*z
+    }
+    float uni[] = {8,6,7,5,3,0,9},
+           v0[] = {1, 2, 3, 4, 5, 6},
+         want[] = {9,18,27,36,45,54};
+    test(b,want,v0,uni);
+}
+
+static void test_gather(void) {
+    struct Builder *b = builder();
+    {
+        int x = load(b,0,thread_id(b)),   // load varying x = v0[thread_id]
+            y = load(b,1,x);              // load varying y = v1[x] == v1[v0[x]]
+        store(b,0, y);
+    }
+    float v0[] = {1,2,3,4,5,6},
+          v1[] = {0,-1,-2,-3,-4,-5,-6},
+        want[] = {-1,-2,-3,-4,-5,-6};
+    test(b,want,v0,v1);
+}
+
 int main(void) {
     internal_tests();
 
@@ -289,5 +326,8 @@ int main(void) {
 
     test_dead_code();
     test_uniform_load();
+    test_thread_id();
+    test_complex_uniforms();
+    test_gather();
     return 0;
 }
