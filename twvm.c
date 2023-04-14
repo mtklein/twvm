@@ -224,11 +224,15 @@ static stage(bsel) {
 
 #pragma GCC diagnostic pop
 
-int fadd(Builder *b, int x, int y       ) { return sort(b, .fn=fadd_, .x=x, .y=y      ); }
+int fadd(Builder *b, int x, int y) {
+    if (b->inst[x].fn==fmul_) { return push(b, .fn=fmad_, .x=b->inst[x].x, .y=b->inst[x].y, .z=y); }
+    if (b->inst[y].fn==fmul_) { return push(b, .fn=fmad_, .x=b->inst[y].x, .y=b->inst[y].y, .z=x); }
+    return sort(b, .fn=fadd_, .x=x, .y=y);
+}
+
 int fsub(Builder *b, int x, int y       ) { return push(b, .fn=fsub_, .x=x, .y=y      ); }
 int fmul(Builder *b, int x, int y       ) { return sort(b, .fn=fmul_, .x=x, .y=y      ); }
 int fdiv(Builder *b, int x, int y       ) { return push(b, .fn=fdiv_, .x=x, .y=y      ); }
-int fmad(Builder *b, int x, int y, int z) { return sort(b, .fn=fmad_, .x=x, .y=y, .z=z); }
 int feq (Builder *b, int x, int y       ) { return sort(b, .fn=feq_ , .x=x, .y=y      ); }
 int flt (Builder *b, int x, int y       ) { return push(b, .fn=flt_ , .x=x, .y=y      ); }
 int fle (Builder *b, int x, int y       ) { return push(b, .fn=fle_ , .x=x, .y=y      ); }

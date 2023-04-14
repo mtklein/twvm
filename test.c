@@ -81,8 +81,9 @@ static void test_fmad(void) {
     struct Builder *b = builder();
     {
         int x = load(b,0,thread_id(b)),
-            y = fmad(b,x,x,splat(b,3.0f));
-        store(b,0,y);
+            y = fmul(b,x,x),
+            z = fadd(b,y,splat(b,3.0f));
+        store(b,0,z);
     }
     float v0[] = {1,2, 3, 4, 5, 6},
         want[] = {4,7,12,19,28,39};
