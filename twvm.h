@@ -1,6 +1,6 @@
 #pragma once
 
-struct Builder* builder(void);
+struct Builder* builder(int ptrs);
 struct Program* compile(struct Builder*);
 void            execute(struct Program const*, int n, void *ptr[]);
 

@@ -6,7 +6,7 @@
 void internal_tests(void);
 
 static void test_nothing(void) {
-    free(compile(builder()));
+    free(compile(builder(0)));
 }
 
 static _Bool equiv(float x, float y) {
@@ -26,7 +26,7 @@ static void test_(struct Builder *b, float const want[], int n, void *ptr[]) {
 #define test(b,want,...) test_(b,want,sizeof(want)/sizeof(0[want]), (void*[]){__VA_ARGS__})
 
 static void test_fadd(void) {
-    struct Builder *b = builder();
+    struct Builder *b = builder(2);
     {
         int x = load(b,0,thread_id(b)),
             y = load(b,1,thread_id(b));
@@ -39,7 +39,7 @@ static void test_fadd(void) {
 }
 
 static void test_fsub(void) {
-    struct Builder *b = builder();
+    struct Builder *b = builder(2);
     {
         int x = load(b,0,thread_id(b)),
             y = load(b,1,thread_id(b));
@@ -52,7 +52,7 @@ static void test_fsub(void) {
 }
 
 static void test_fmul(void) {
-    struct Builder *b = builder();
+    struct Builder *b = builder(2);
     {
         int x = load(b,0,thread_id(b)),
             y = load(b,1,thread_id(b));
@@ -65,7 +65,7 @@ static void test_fmul(void) {
 }
 
 static void test_fdiv(void) {
-    struct Builder *b = builder();
+    struct Builder *b = builder(2);
     {
         int x = load(b,0,thread_id(b)),
             y = load(b,1,thread_id(b));
@@ -78,7 +78,7 @@ static void test_fdiv(void) {
 }
 
 static void test_fmad(void) {
-    struct Builder *b = builder();
+    struct Builder *b = builder(1);
     {
         int x = load(b,0,thread_id(b)),
             y = fmul(b,x,x),
@@ -92,7 +92,7 @@ static void test_fmad(void) {
 
 
 static void test_feq(void) {
-    struct Builder *b = builder();
+    struct Builder *b = builder(2);
     {
         int x = load(b,0,thread_id(b)),
             y = load(b,1,thread_id(b));
@@ -106,7 +106,7 @@ static void test_feq(void) {
 }
 
 static void test_flt(void) {
-    struct Builder *b = builder();
+    struct Builder *b = builder(2);
     {
         int x = load(b,0,thread_id(b)),
             y = load(b,1,thread_id(b));
@@ -120,7 +120,7 @@ static void test_flt(void) {
 }
 
 static void test_fle(void) {
-    struct Builder *b = builder();
+    struct Builder *b = builder(2);
     {
         int x = load(b,0,thread_id(b)),
             y = load(b,1,thread_id(b));
@@ -134,7 +134,7 @@ static void test_fle(void) {
 }
 
 static void test_fgt(void) {
-    struct Builder *b = builder();
+    struct Builder *b = builder(2);
     {
         int x = load(b,0,thread_id(b)),
             y = load(b,1,thread_id(b));
@@ -148,7 +148,7 @@ static void test_fgt(void) {
 }
 
 static void test_fge(void) {
-    struct Builder *b = builder();
+    struct Builder *b = builder(2);
     {
         int x = load(b,0,thread_id(b)),
             y = load(b,1,thread_id(b));
@@ -162,7 +162,7 @@ static void test_fge(void) {
 }
 
 static void test_band(void) {
-    struct Builder *b = builder();
+    struct Builder *b = builder(2);
     {
         int x = load(b,0,thread_id(b)),
             y = load(b,1,thread_id(b));
@@ -176,7 +176,7 @@ static void test_band(void) {
 }
 
 static void test_bor(void) {
-    struct Builder *b = builder();
+    struct Builder *b = builder(2);
     {
         int x = load(b,0,thread_id(b)),
             y = load(b,1,thread_id(b));
@@ -190,7 +190,7 @@ static void test_bor(void) {
 }
 
 static void test_bxor(void) {
-    struct Builder *b = builder();
+    struct Builder *b = builder(2);
     {
         int x = load(b,0,thread_id(b)),
             y = load(b,1,thread_id(b));
@@ -204,7 +204,7 @@ static void test_bxor(void) {
 }
 
 static void test_mutate(void) {
-    struct Builder *b = builder();
+    struct Builder *b = builder(1);
     {
         int x = load(b,0,thread_id(b));
         mutate(b,&x,fmul(b,x,splat(b,3.0f)));
@@ -216,7 +216,7 @@ static void test_mutate(void) {
 }
 
 static void test_jump(void) {
-    struct Builder *b = builder();
+    struct Builder *b = builder(1);
     {
         int x = load(b,0,thread_id(b));
         {
@@ -235,7 +235,7 @@ static void test_jump(void) {
 }
 
 static void test_dead_code(void) {
-    struct Builder *b = builder();
+    struct Builder *b = builder(1);
     {
         int x = load(b,0,thread_id(b)),
             y = fmul(b,x,x),
@@ -250,7 +250,7 @@ static void test_dead_code(void) {
 }
 
 static void test_uniform_load(void) {
-    struct Builder *b = builder();
+    struct Builder *b = builder(2);
     {
         int x = load(b,0,thread_id(b)),
             y = load(b,1,splat(b,0.0f)),
@@ -265,7 +265,7 @@ static void test_uniform_load(void) {
 }
 
 static void test_thread_id(void) {
-    struct Builder *b = builder();
+    struct Builder *b = builder(1);
     {
         store(b,0, fmul(b, thread_id(b), splat(b,2.0f)));
     }
@@ -275,7 +275,7 @@ static void test_thread_id(void) {
 }
 
 static void test_complex_uniforms(void) {
-    struct Builder *b = builder();
+    struct Builder *b = builder(2);
     {
         int x = load(b,1, splat(b,1.0f)),   // load uniform x =           uni[1] == 6.0f
             y = load(b,1, x),               // load uniform y = uni[x] == uni[6] == 9.0f
@@ -289,7 +289,7 @@ static void test_complex_uniforms(void) {
 }
 
 static void test_gather(void) {
-    struct Builder *b = builder();
+    struct Builder *b = builder(2);
     {
         int x = load(b,0,thread_id(b)),   // load varying x = v0[thread_id]
             y = load(b,1,x);              // load varying y = v1[x] == v1[v0[x]]

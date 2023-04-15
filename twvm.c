@@ -19,30 +19,32 @@ typedef struct PInst {
 } PInst;
 
 typedef enum { CONSTANT,UNIFORM,VARYING } Shape;
-typedef enum { CSE,NO_CSE,LIVE} Eval;
 
 typedef struct BInst {
     int (*fn)(struct PInst const *ip, V32 *v, int end, void *ptr[]);
     int   x,y,z;  // Absolute into b->inst, with id=0 predefined as a phony value (N/A).
     union { int ptr; float imm; };
 
-    Shape shape  :  2;
-    Eval  eval   :  2;
-    int   unused : 28;
+    Shape shape   :  2;
+    _Bool live    :  1;
+    int   ptr_gen : 29;
     int   id;
 } BInst;
 
 typedef struct Builder {
     BInst       *inst;
-    int          insts,unused;
+    int         *ptr_gen;
+    int          insts,ptrs;
     struct hash *cse;
 } Builder;
 
-Builder* builder(void) {
+Builder* builder(int ptrs) {
     Builder *b = calloc(1, sizeof *b);
     // A phony instruction at id=0 lets us assume that every BInst's inputs (x,y,z) always exist.
-    b->inst  = calloc(1, sizeof *b->inst);
-    b->insts = 1;
+    b->inst    = calloc(1, sizeof *b->inst);
+    b->insts   = 1;
+    b->ptr_gen = calloc((size_t)ptrs, sizeof *b->ptr_gen);
+    b->ptrs    = ptrs;
     return b;
 }
 
@@ -105,6 +107,10 @@ static unsigned fnv1a(void const *v, size_t len) {
 }
 
 static int push_(Builder *b, BInst inst) {
+    assert(inst.x < b->insts);
+    assert(inst.y < b->insts);
+    assert(inst.z < b->insts);
+
     if (inst.shape < b->inst[inst.x].shape) { inst.shape = b->inst[inst.x].shape; }
     if (inst.shape < b->inst[inst.y].shape) { inst.shape = b->inst[inst.y].shape; }
     if (inst.shape < b->inst[inst.z].shape) { inst.shape = b->inst[inst.z].shape; }
@@ -124,7 +130,7 @@ static int push_(Builder *b, BInst inst) {
     int const id = b->insts++;
     b->inst[id] = inst;
 
-    if (inst.eval == CSE) {
+    if (!inst.live) {
         b->cse = hash_insert(b->cse, hash, id);
     }
     return id;
@@ -178,15 +184,16 @@ static stage(load_gather) {
     }
     next;
 }
-
 int load(Builder *b, int ptr, int ix) {
+    assert(ptr < b->ptrs);
+    int const ptr_gen = b->ptr_gen[ptr];
     if (b->inst[ix].shape <= UNIFORM) {
-        return push(b, .fn=load_uniform_, .ptr=ptr, .x=ix, .shape=UNIFORM);
+        return push(b, .fn=load_uniform_, .ptr=ptr, .x=ix, .shape=UNIFORM, .ptr_gen=ptr_gen);
     }
     if (b->inst[ix].fn == thread_id_) {
-        return push(b, .fn=load_contiguous_, .ptr=ptr, .shape=VARYING, .eval=NO_CSE);
+        return push(b, .fn=load_contiguous_, .ptr=ptr, .shape=VARYING, .ptr_gen=ptr_gen);
     }
-    return push(b, .fn=load_gather_, .ptr=ptr, .x=ix, .shape=VARYING, .eval=NO_CSE);
+    return push(b, .fn=load_gather_, .ptr=ptr, .x=ix, .shape=VARYING, .ptr_gen=ptr_gen);
 }
 
 static stage(store) {
@@ -196,7 +203,9 @@ static stage(store) {
     next;
 }
 void store(Builder *b, int ptr, int x) {
-    push(b, .fn=store_, .ptr=ptr, .x=x, .shape=VARYING, .eval=LIVE);
+    assert(ptr < b->ptrs);
+    push(b, .fn=store_, .ptr=ptr, .x=x, .shape=VARYING, .live=1);
+    b->ptr_gen[ptr]++;
 }
 
 #pragma GCC diagnostic push
@@ -246,7 +255,7 @@ static stage(mutate) {
     next;
 }
 void mutate(Builder *b, int *var, int val) {
-    push(b, .fn=mutate_, .x=*var, .y=val, .eval=LIVE);
+    push(b, .fn=mutate_, .x=*var, .y=val, .live=1);
 
     // Forget all CSE entries when anything mutates.  (TODO: kind of a big hammer)
     free(b->cse);
@@ -266,7 +275,7 @@ static stage(jump) {
     }
     next;
 }
-void jump(Builder *b, int dst, int cond) { push(b, .fn=jump_, .x=dst, .y=cond, .eval=LIVE); }
+void jump(Builder *b, int dst, int cond) { push(b, .fn=jump_, .x=dst, .y=cond, .live=1); }
 
 typedef struct Program {
     int   insts,loop;
@@ -277,16 +286,16 @@ typedef struct Program {
 #define backward(elt,arr) for (__typeof__(arr) elt = arr + arr##s; elt --> arr;)
 
 Program* compile(Builder *b) {
-    push(b, .fn=done_, .shape=VARYING, .eval=LIVE);
+    push(b, .fn=done_, .shape=VARYING, .live=1);
 
     // Dead code elimination: the inputs of live instructions are live, and anything else is dead.
     // Marking dead instructions with fn=NULL handles the phony id=0 instruction naturally.
     int live = 0;
     backward(inst, b->inst) {
-        if (inst->eval == LIVE) {
-            b->inst[inst->x].eval = LIVE;
-            b->inst[inst->y].eval = LIVE;
-            b->inst[inst->z].eval = LIVE;
+        if (inst->live) {
+            b->inst[inst->x].live =
+            b->inst[inst->y].live =
+            b->inst[inst->z].live = 1;
         } else {
             inst->fn = NULL;
         }
@@ -315,6 +324,7 @@ Program* compile(Builder *b) {
     assert(p->insts == live);
 
     free(b->inst);
+    free(b->ptr_gen);
     free(b->cse);
     free(b);
     return p;
@@ -333,7 +343,7 @@ void execute(Program const *p, int n, void *ptr[]) {
 }
 
 static void test_constant_prop(void) {
-    Builder *b = builder();
+    Builder *b = builder(0);
     int x = splat(b,2.0f),
         y = fmul (b,x,x);
     expect(b->inst[y].fn == splat_);
@@ -341,7 +351,7 @@ static void test_constant_prop(void) {
 }
 
 static void test_dead_code_elimination(void) {
-    Builder *b = builder();
+    Builder *b = builder(1);
     {
         int live = splat(b,2.0f),
             dead = splat(b,4.0f);
@@ -354,7 +364,7 @@ static void test_dead_code_elimination(void) {
 }
 
 static void test_loop_hoisting(void) {
-    Builder *b = builder();
+    Builder *b = builder(1);
     {
         int x = load(b,0,thread_id(b)),
             y = load(b,0,splat(b,0.0f)),
@@ -376,7 +386,7 @@ static void test_loop_hoisting(void) {
 }
 
 static void test_cse(void) {
-    Builder *b = builder();
+    Builder *b = builder(1);
     {
         int x = load(b,0,thread_id(b)),
             y = fmul(b,x,x),
@@ -386,7 +396,7 @@ static void test_cse(void) {
     free(compile(b));
 }
 static void test_more_cse(void) {
-    Builder *b = builder();
+    Builder *b = builder(0);
     {
         int x = splat(b,2.0f),
             y = splat(b,2.0f);
@@ -395,7 +405,7 @@ static void test_more_cse(void) {
     free(compile(b));
 }
 static void test_no_cse(void) {
-    Builder *b = builder();
+    Builder *b = builder(1);
     {
         int x = load(b,0,thread_id(b)),
             y = fmul(b,x,x);
@@ -407,7 +417,7 @@ static void test_no_cse(void) {
 }
 
 static void test_cse_sort(void) {
-    Builder *b = builder();
+    Builder *b = builder(1);
      {
         int x = load (b,0,thread_id(b)),
             c = splat(b,2.0f),
@@ -420,7 +430,7 @@ static void test_cse_sort(void) {
     free(compile(b));
 }
 static void test_cse_no_sort(void) {
-    Builder *b = builder();
+    Builder *b = builder(1);
      {
         int x = load (b,0,thread_id(b)),
             c = splat(b,2.0f),
@@ -433,30 +443,27 @@ static void test_cse_no_sort(void) {
     free(compile(b));
 }
 
-static void test_thread_id_cse(void) {
-    Builder *b = builder();
-    {
-        int x = thread_id(b),
-            y = thread_id(b);
-        expect(x == y);
-    }
-    free(compile(b));
-}
-static void test_uniform_load_cse(void) {
-    Builder *b = builder();
-    {
-        int x = load(b,0, splat(b,0.0f)),
-            y = load(b,0, splat(b,0.0f));
-        expect(x == y);
-    }
-    free(compile(b));
-}
-static void test_varying_load_no_cse(void) {
-    Builder *b = builder();
+static void test_load_cse(void) {
+    Builder *b = builder(2);
     {
         int x = load(b,0, thread_id(b)),
-            y = load(b,0, thread_id(b));
-        expect(x != y);
+            y = load(b,0, thread_id(b)),
+            z = load(b,1, thread_id(b)),
+            u = load(b,0, splat(b,0.0f)),
+            v = load(b,0, splat(b,0.0f));
+        expect(x == y);  // CSE should work for loading varyings
+        expect(u == v);  // and also of course for uniforms
+        expect(x != z);  // x and z are different varyings
+        expect(x != u);  // x and u are different shapes
+
+        store(b,0, fadd(b,x,y));
+
+        int X = load(b,0, thread_id(b)),
+            Z = load(b,1, thread_id(b)),
+            U = load(b,0, splat(b,0.0f));
+        expect(x != X);  // a store to ptr 0 invalidates loads from ptr 0
+        expect(u != U);  // a store to ptr 0 also invalidates uniform loads from ptr 0
+        expect(z == Z);  // a store to ptr 0 does not invalidate loads from ptr 1
     }
     free(compile(b));
 }
@@ -475,7 +482,5 @@ void internal_tests(void) {
     test_cse_sort();
     test_cse_no_sort();
 
-    test_thread_id_cse();
-    test_uniform_load_cse();
-    test_varying_load_no_cse();
+    test_load_cse();
 }
