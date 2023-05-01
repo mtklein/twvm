@@ -28,7 +28,7 @@ rule run
     modes = {
         'dbg': '$clang -fsanitize=address,integer,undefined -fno-sanitize-recover=all',
         'opt': '$clang -Os -DNDEBUG',
-        'gcc': 'gcc-12 -O1 -Wall -Wextra',
+        'gcc': 'gcc-13 -O1 -Wall -Wextra',
     }
     srcs = subprocess.check_output(['git', 'ls-files', '*.c']).decode().split()
     main = subprocess.check_output(['git', 'grep', '-l', 'main('] + srcs).decode().split()
