@@ -16,25 +16,26 @@ rule compile
   deps    = gcc
 
 rule archive
-  command = ar rcs $out $in
+  command = zig ar rcs $out $in
 
 rule link
   command = $cc -Wl,-dead_strip $in -o $out
 
 rule run
-  command = ./$in > $out
+  command = $runtime ./$in > $out
 ''')
 
     modes = {
-        'dbg': '$clang -fsanitize=address,integer,undefined -fno-sanitize-recover=all',
-        'opt': '$clang -Os -DNDEBUG',
-        'gcc': 'gcc-13 -O1 -Wall -Wextra',
+        'dbg':  ('$clang -fsanitize=address,integer,undefined -fno-sanitize-recover=all', ''),
+        'opt':  ('$clang -Os -DNDEBUG', ''),
+        'gcc':  ('gcc-13 -O1 -Wall -Wextra', ''),
+        'wasm': ('zig cc -Os -target wasm32-wasi', 'wasmer'),
     }
     srcs = subprocess.check_output(['git', 'ls-files', '*.c']).decode().split()
     main = subprocess.check_output(['git', 'grep', '-l', 'main('] + srcs).decode().split()
     rest = [src for src in srcs if src not in main]
 
-    for mode,cc in modes.items():
+    for mode,(cc,runtime) in modes.items():
         def target(src):
             return os.path.join('out', mode, os.path.splitext(src)[0])
         for src in srcs:
@@ -43,7 +44,7 @@ rule run
         for src in main:
             b.write(f'build {target(src)}: link {target(src)}.o {target("lib")}.a\n  cc={cc}\n')
             if 'test' in src:
-                b.write(f'build {target(src)}.ok: run {target(src)}\n')
+                b.write(f'build {target(src)}.ok: run {target(src)}\n  runtime={runtime}\n')
 
 rc = subprocess.call(['ninja'] + sys.argv[1:])
 if rc == 0:

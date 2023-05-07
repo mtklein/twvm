@@ -48,7 +48,7 @@ Builder* builder(int ptrs) {
     return b;
 }
 
-#if defined(__clang__)
+#if defined(__clang__) && !defined(__wasm__)
     #define next __attribute__((musttail)) return ip[1].fn(ip+1,v+1,end,ptr)
 #else
     #define next                           return ip[1].fn(ip+1,v+1,end,ptr)
