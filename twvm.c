@@ -210,6 +210,9 @@ void store(Builder *b, int ptr, int x) {
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wfloat-equal"
+#if defined(__wasm__)
+    #pragma GCC diagnostic ignored "-Wvector-conversion"  // vector(long) != vector(int) somehow?
+#endif
 
 static stage(fadd) { v->f = v[ip->x].f +  v[ip->y].f             ; next; }
 static stage(fsub) { v->f = v[ip->x].f -  v[ip->y].f             ; next; }
