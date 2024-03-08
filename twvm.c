@@ -353,7 +353,7 @@ static void test_constant_prop(void) {
     Builder *b = builder(0);
     int x = splat(b,2.0f),
         y = fmul (b,x,x);
-    expect(b->inst[y].fn == splat_);
+    expect(b->inst[y].fn  == splat_ && b->inst[y].imm == 4.0f);
     free(compile(b));
 }
 
@@ -367,6 +367,9 @@ static void test_dead_code_elimination(void) {
     }
     Program *p = compile(b);
     expect(p->insts == 3);
+    expect(p->inst[0].fn == splat_ && p->inst[0].imm == 2.0f);
+    expect(p->inst[1].fn == store_);
+    expect(p->inst[2].fn == done_);
     free(p);
 }
 
@@ -418,6 +421,21 @@ static void test_no_cse(void) {
             y = fmul(b,x,x);
         mutate(b, &x, y);
         int z = fmul(b,x,x);
+        expect(y != z);
+    }
+    free(compile(b));
+}
+
+// TODO: does mutate() make sense on values which have already been CSE'd?
+// Perhaps this indicates we do need explicit variables instead of mutate().
+static void test_also_no_cse(void) {
+    Builder *b = builder(1);
+    if ((0)) {
+        int x = load(b,0,thread_id(b)),
+            y = fmul(b,x,x),
+            z = fmul(b,x,x);
+        expect(y == z);
+        mutate(b, &z, x);
         expect(y != z);
     }
     free(compile(b));
@@ -485,6 +503,7 @@ void internal_tests(void) {
     test_cse();
     test_more_cse();
     test_no_cse();
+    test_also_no_cse();
 
     test_cse_sort();
     test_cse_no_sort();
