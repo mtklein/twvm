@@ -267,10 +267,14 @@ void mutate(Builder *b, int *var, int val) {
 
 static stage(jump) {
     vector(int) const cond = v[ip->y].i;
+#if __has_builtin(__builtin_reduce_min)
+    int const any = __builtin_reduce_min(cond);
+#else
     int any = 0;
     for (int i = 0; i < K; i++) {
         any |= cond[i];
     }
+#endif
     if (any) {
         int const jmp = ip->x - 1;
         ip += jmp;
