@@ -285,6 +285,17 @@ static void test_scatter(void) {
     test(b, want,got,ix);
 }
 
+static void test_store_uniform(void) {
+    struct Builder *b = builder(1);
+    {
+        int u = load(b,0, splat(b,3.0f));
+        store(b,0, splat(b,2.0f), fmul(b, u,u));
+    }
+    float uni[] = {8,6, 7,5,3,0,9},
+         want[] = {8,6,25,5,3,0,9};
+    test(b, want,uni);
+}
+
 int main(void) {
     internal_tests();
 
@@ -313,5 +324,6 @@ int main(void) {
     test_complex_uniforms();
     test_gather();
     test_scatter();
+    test_store_uniform();
     return 0;
 }
