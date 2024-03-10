@@ -207,9 +207,11 @@ defn(store_contiguous) {
 }
 defn(store_scatter) {
     float *p = ptr[ip->ptr];
-    vector(float) ix = v[ip->x].f;
-    for (int i = 0; i < K; i++) {
-        p[(int)ix[i]] = v[ip->y].f[i];
+    vector(float) ix = v[ip->x].f,
+                 val = v[ip->y].f;
+    int const lanes = (end & (K-1)) ? 1 : K;
+    for (int i = 0; i < lanes; i++) {
+        p[(int)ix[i]] = val[i];
     }
     next;
 }
