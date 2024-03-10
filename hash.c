@@ -8,7 +8,7 @@ struct hash {
 };
 
 static void just_insert(struct hash *h, unsigned hash, int val) {
-    assert(hash && h->len+1 <= h->mask);  // At least two empty slots remain.
+    assert(h && hash && h->len+1 <= h->mask);  // At least two empty slots remain.
     unsigned i = hash & h->mask;
     while (h->entry[i].hash) {
         i = (i+1) & h->mask;
@@ -16,7 +16,7 @@ static void just_insert(struct hash *h, unsigned hash, int val) {
     h->entry[i].hash = hash;
     h->entry[i].val  = val;
     h->len++;
-    assert(h->len <= h->mask);            // At least one empty slot remains.
+    assert(h->len <= h->mask);                // At least one empty slot remains.
 }
 
 struct hash* hash_insert(struct hash *h, unsigned hash, int val) {
