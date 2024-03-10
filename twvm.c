@@ -300,8 +300,8 @@ Program* compile(Builder *b) {
     int live = 0;
     backward(inst, b->inst) {
         if (inst->live) {
-            b->inst[inst->x].live =
-            b->inst[inst->y].live =
+            b->inst[inst->x].live = 1;
+            b->inst[inst->y].live = 1;
             b->inst[inst->z].live = 1;
         } else {
             inst->fn = NULL;
