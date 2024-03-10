@@ -246,9 +246,6 @@ int bor (struct Builder *b, int x, int y       ) { return sort(b, .fn=bor_ , .x=
 int bxor(struct Builder *b, int x, int y       ) { return sort(b, .fn=bxor_, .x=x, .y=y      ); }
 int bsel(struct Builder *b, int x, int y, int z) { return push(b, .fn=bsel_, .x=x, .y=y, .z=z); }
 
-int fgt(struct Builder *b, int x, int y) { return flt(b,y,x); }
-int fge(struct Builder *b, int x, int y) { return fle(b,y,x); }
-
 defn(mutate) {
     v[ip->x] = v[ip->y];
     next;

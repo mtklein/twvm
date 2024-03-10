@@ -133,34 +133,6 @@ static void test_fle(void) {
     test(b,want,v0,v1);
 }
 
-static void test_fgt(void) {
-    struct Builder *b = builder(2);
-    {
-        int x = load(b,0,thread_id(b)),
-            y = load(b,1,thread_id(b));
-        store(b,0, fgt(b,x,y));
-    }
-    float const t = 0.0f/0.0f;
-    float v0[] = {1,2,3,4,5,6},
-          v1[] = {4,4,4,4,4,4},
-        want[] = {0,0,0,0,t,t};
-    test(b,want,v0,v1);
-}
-
-static void test_fge(void) {
-    struct Builder *b = builder(2);
-    {
-        int x = load(b,0,thread_id(b)),
-            y = load(b,1,thread_id(b));
-        store(b,0, fge(b,x,y));
-    }
-    float const t = 0.0f/0.0f;
-    float v0[] = {1,2,3,4,5,6},
-          v1[] = {4,4,4,4,4,4},
-        want[] = {0,0,0,t,t,t};
-    test(b,want,v0,v1);
-}
-
 static void test_band(void) {
     struct Builder *b = builder(2);
     {
@@ -220,7 +192,7 @@ static void test_jump(void) {
     {
         int x = load(b,0,thread_id(b));
         {
-            int cond = fgt (b,x,splat(b,0.0f)),
+            int cond = flt (b, splat(b,0.0f), x),
                 newx = bsel(b,cond
                              ,fsub(b,x,splat(b,1.0f))
                              ,x);
@@ -315,8 +287,6 @@ int main(void) {
     test_feq();
     test_flt();
     test_fle();
-    test_fgt();
-    test_fge();
 
     test_band();
     test_bor();

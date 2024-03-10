@@ -18,8 +18,6 @@ int fdiv(struct Builder*, int,int);
 int feq(struct Builder*, int,int);
 int flt(struct Builder*, int,int);
 int fle(struct Builder*, int,int);
-int fgt(struct Builder*, int,int);
-int fge(struct Builder*, int,int);
 
 int band(struct Builder*, int,int);
 int bor (struct Builder*, int,int);
