@@ -194,15 +194,15 @@ static void test_loop(void) {
         {
             int cond = flt (b, splat(b,0.0f), x),
                 newx = bsel(b,cond
-                             ,fsub(b,x,splat(b,1.0f))
+                             ,fsub(b,x,splat(b,2.0f))
                              ,x);
             mutate(b,&x,newx);
             loop(b,cond);
         }
         store(b,0,x);
     }
-    float v0[] = {1,2,3,4,5,6},
-        want[] = {0,0,0,0,0,0};
+    float v0[] = { 1,2, 3,4, 5,6},
+        want[] = {-1,0,-1,0,-1,0};
     test(b,want,v0);
 }
 
