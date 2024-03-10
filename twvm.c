@@ -192,15 +192,20 @@ int load(struct Builder *b, int ptr, int ix) {
     return push(b, .fn=load_gather_, .ptr=ptr, .x=ix, .shape=VARYING, .ptr_gen=ptr_gen);
 }
 
-defn(store) {
+defn(store_contiguous) {
     float *p = ptr[ip->ptr];
-    if (end & (K-1)) { __builtin_memcpy(p + end - 1, v+ip->x,   sizeof(float)); }
-    else             { __builtin_memcpy(p + end - K, v+ip->x, K*sizeof(float)); }
+    if (end & (K-1)) { __builtin_memcpy(p + end - 1, v+ip->y,   sizeof(float)); }
+    else             { __builtin_memcpy(p + end - K, v+ip->y, K*sizeof(float)); }
     next;
 }
-void store(struct Builder *b, int ptr, int x) {
+void store(struct Builder *b, int ptr, int ix, int val) {
     assert(ptr < b->ptrs);
-    push(b, .fn=store_, .ptr=ptr, .x=x, .shape=VARYING, .live=1);
+
+    // TODO: scatter as general case, maybe store_uniform when ix and val are both <= uniform?
+    assert(b->inst[ix].fn == thread_id_);
+    (void)ix;
+
+    push(b, .fn=store_contiguous_, .ptr=ptr, .y=val, .shape=VARYING, .live=1);
     b->ptr_gen[ptr]++;
 }
 
@@ -353,12 +358,12 @@ static void test_dead_code_elimination(void) {
         int live = splat(b,2.0f),
             dead = splat(b,4.0f);
         (void)dead;
-        store(b,0,live);
+        store(b,0,thread_id(b),live);
     }
     struct Program *p = compile(b);
     expect(p->insts == 3);
     expect(p->inst[0].fn == splat_ && p->inst[0].imm == 2.0f);
-    expect(p->inst[1].fn == store_);
+    expect(p->inst[1].fn == store_contiguous_);
     expect(p->inst[2].fn == done_);
     free(p);
 }
@@ -369,7 +374,7 @@ static void test_fmad(void) {
         int x = load(b,0,thread_id(b)),
             y = fmul(b,x,x),
             z = fadd(b,y,splat(b,3.0f));
-        store(b,0,z);
+        store(b,0,thread_id(b),z);
     }
     struct Program *p = compile(b);
     expect(p->insts == 5);
@@ -384,7 +389,7 @@ static void test_loop_hoisting(void) {
             y = load(b,0,splat(b,0.0f)),
             z = fadd(b,y,splat(b,1.0f)),
             w = fmul(b,x,z);
-        store(b,0,w);
+        store(b,0,thread_id(b),w);
     }
     struct Program *p = compile(b);
     expect(p->insts == 8);
@@ -395,7 +400,7 @@ static void test_loop_hoisting(void) {
     expect(p->inst[3].fn == fadd_);
     expect(p->inst[4].fn == load_contiguous_);
     expect(p->inst[5].fn == fmul_);
-    expect(p->inst[6].fn == store_);
+    expect(p->inst[6].fn == store_contiguous_);
     free(p);
 }
 
@@ -485,7 +490,7 @@ static void test_load_cse(void) {
         expect(x != z);  // x and z are different varyings
         expect(x != u);  // x and u are different shapes
 
-        store(b,0, fadd(b,x,y));
+        store(b,0, thread_id(b), fadd(b,x,y));
 
         int X = load(b,0, thread_id(b)),
             Z = load(b,1, thread_id(b)),

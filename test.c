@@ -30,7 +30,7 @@ static void test_fadd(void) {
     {
         int x = load(b,0,thread_id(b)),
             y = load(b,1,thread_id(b));
-        store(b,0, fadd(b,x,y));
+        store(b,0,thread_id(b), fadd(b,x,y));
     }
     float v0[] = {1,2,3,4,5, 6},
           v1[] = {4,4,4,4,4, 4},
@@ -43,7 +43,7 @@ static void test_fsub(void) {
     {
         int x = load(b,0,thread_id(b)),
             y = load(b,1,thread_id(b));
-        store(b,0, fsub(b,x,y));
+        store(b,0,thread_id(b), fsub(b,x,y));
     }
     float v0[] = { 1, 2, 3, 4, 5, 6},
           v1[] = { 4, 4, 4, 4, 4, 4},
@@ -56,7 +56,7 @@ static void test_fmul(void) {
     {
         int x = load(b,0,thread_id(b)),
             y = load(b,1,thread_id(b));
-        store(b,0, fmul(b,x,y));
+        store(b,0,thread_id(b), fmul(b,x,y));
     }
     float v0[] = {1,2, 3, 4, 5, 6},
           v1[] = {4,4, 4, 4, 4, 4},
@@ -69,7 +69,7 @@ static void test_fdiv(void) {
     {
         int x = load(b,0,thread_id(b)),
             y = load(b,1,thread_id(b));
-        store(b,0, fdiv(b,x,y));
+        store(b,0,thread_id(b), fdiv(b,x,y));
     }
     float v0[] = {   1,   2,    3,   4,    5,   6},
           v1[] = {   4,   4,    4,   4,    4,   4},
@@ -83,7 +83,7 @@ static void test_fmad(void) {
         int x = load(b,0,thread_id(b)),
             y = fmul(b,x,x),
             z = fadd(b,y,splat(b,3.0f));
-        store(b,0,z);
+        store(b,0,thread_id(b), z);
     }
     float v0[] = {1,2, 3, 4, 5, 6},
         want[] = {4,7,12,19,28,39};
@@ -96,7 +96,7 @@ static void test_feq(void) {
     {
         int x = load(b,0,thread_id(b)),
             y = load(b,1,thread_id(b));
-        store(b,0, feq(b,x,y));
+        store(b,0,thread_id(b), feq(b,x,y));
     }
     float const t = 0.0f/0.0f;
     float v0[] = {1,2,3,4,5,6},
@@ -110,7 +110,7 @@ static void test_flt(void) {
     {
         int x = load(b,0,thread_id(b)),
             y = load(b,1,thread_id(b));
-        store(b,0, flt(b,x,y));
+        store(b,0,thread_id(b), flt(b,x,y));
     }
     float const t = 0.0f/0.0f;
     float v0[] = {1,2,3,4,5,6},
@@ -124,7 +124,7 @@ static void test_fle(void) {
     {
         int x = load(b,0,thread_id(b)),
             y = load(b,1,thread_id(b));
-        store(b,0, fle(b,x,y));
+        store(b,0,thread_id(b), fle(b,x,y));
     }
     float const t = 0.0f/0.0f;
     float v0[] = {1,2,3,4,5,6},
@@ -138,7 +138,7 @@ static void test_band(void) {
     {
         int x = load(b,0,thread_id(b)),
             y = load(b,1,thread_id(b));
-        store(b,0, band(b,x,y));
+        store(b,0,thread_id(b), band(b,x,y));
     }
     float const t = 0.0f/0.0f;
     float v0[] = {0,0,t,t},
@@ -152,7 +152,7 @@ static void test_bor(void) {
     {
         int x = load(b,0,thread_id(b)),
             y = load(b,1,thread_id(b));
-        store(b,0, bor(b,x,y));
+        store(b,0,thread_id(b), bor(b,x,y));
     }
     float const t = 0.0f/0.0f;
     float v0[] = {0,0,t,t},
@@ -166,7 +166,7 @@ static void test_bxor(void) {
     {
         int x = load(b,0,thread_id(b)),
             y = load(b,1,thread_id(b));
-        store(b,0, bxor(b,x,y));
+        store(b,0,thread_id(b), bxor(b,x,y));
     }
     float const t = 0.0f/0.0f;
     float v0[] = {0,0,t,t},
@@ -180,7 +180,7 @@ static void test_mutate(void) {
     {
         int x = load(b,0,thread_id(b));
         mutate(b,&x,fmul(b,x,splat(b,3.0f)));
-        store(b,0,x);
+        store(b,0,thread_id(b), x);
     }
     float v0[] = {1,2,3, 4, 5, 6},
         want[] = {3,6,9,12,15,18};
@@ -193,13 +193,13 @@ static void test_loop(void) {
         int x = load(b,0,thread_id(b));
         {
             int cond = flt (b, splat(b,0.0f), x),
-                newx = bsel(b,cond
-                             ,fsub(b,x,splat(b,2.0f))
-                             ,x);
+                newx = bsel(b, cond
+                             , fsub(b,x,splat(b,2.0f))
+                             , x);
             mutate(b,&x,newx);
             loop(b,cond);
         }
-        store(b,0,x);
+        store(b,0,thread_id(b), x);
     }
     float v0[] = { 1,2, 3,4, 5,6},
         want[] = {-1,0,-1,0,-1,0};
@@ -214,7 +214,7 @@ static void test_dead_code(void) {
             z = fadd(b,x,x),
             w = fsub(b,z,x);
         (void)y;
-        store(b,0,w);
+        store(b,0,thread_id(b), w);
     }
     float v0[] = {1,2,3,4,5,6},
         want[] = {1,2,3,4,5,6};
@@ -228,7 +228,7 @@ static void test_uniform_load(void) {
             y = load(b,1,splat(b,0.0f)),
             z = fadd(b,y,splat(b,1.0f)),
             w = fmul(b,x,z);
-        store(b,0,w);
+        store(b,0,thread_id(b), w);
     }
     float uni = 3.0f,
          v0[] = {1,2, 3, 4, 5, 6},
@@ -239,7 +239,7 @@ static void test_uniform_load(void) {
 static void test_thread_id(void) {
     struct Builder *b = builder(1);
     {
-        store(b,0, fmul(b, thread_id(b), splat(b,2.0f)));
+        store(b,0,thread_id(b), fmul(b, thread_id(b), splat(b,2.0f)));
     }
     float v0[] = {0,0,0,0,0, 0, 0},
         want[] = {0,2,4,6,8,10,12};
@@ -249,10 +249,10 @@ static void test_thread_id(void) {
 static void test_complex_uniforms(void) {
     struct Builder *b = builder(2);
     {
-        int x = load(b,1, splat(b,1.0f)),   // load uniform x =           uni[1] == 6.0f
-            y = load(b,1, x),               // load uniform y = uni[x] == uni[6] == 9.0f
-            z = load(b,0, thread_id(b));    // load varying z = v0
-        store(b,0, fmul(b,y,z));            // store varying v0 = y*z == 9*z
+        int x = load(b,1, splat(b,1.0f)),     // load uniform x =           uni[1] == 6.0f
+            y = load(b,1, x),                 // load uniform y = uni[x] == uni[6] == 9.0f
+            z = load(b,0, thread_id(b));      // load varying z = v0
+        store(b,0,thread_id(b), fmul(b,y,z)); // store varying v0 = y*z == 9*z
     }
     float uni[] = {8,6,7,5,3,0,9},
            v0[] = {1, 2, 3, 4, 5, 6},
@@ -265,7 +265,7 @@ static void test_gather(void) {
     {
         int x = load(b,0,thread_id(b)),   // load varying x = v0[thread_id]
             y = load(b,1,x);              // load varying y = v1[x] == v1[v0[x]]
-        store(b,0, y);
+        store(b,0,thread_id(b), y);
     }
     float v0[] = {1,2,3,4,5,6},
           v1[] = {0,-1,-2,-3,-4,-5,-6},

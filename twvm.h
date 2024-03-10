@@ -8,7 +8,7 @@ int thread_id(struct Builder*);
 
 int  splat(struct Builder*, float);
 int  load (struct Builder*, int ptr, int ix);
-void store(struct Builder*, int ptr, int val);
+void store(struct Builder*, int ptr, int ix, int val);
 
 int fadd(struct Builder*, int,int);
 int fsub(struct Builder*, int,int);
