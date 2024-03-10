@@ -9,8 +9,10 @@ struct hash {
 
 static void just_insert(struct hash *h, unsigned hash, int val) {
     assert(hash && h->len+1 <= h->mask);  // At least two empty slots remain.
-    unsigned i;
-    for (i = hash & h->mask; h->entry[i].hash; i = (i+1) & h->mask) /*look for empty slot*/;
+    unsigned i = hash & h->mask;
+    while (h->entry[i].hash) {
+        i = (i+1) & h->mask;
+    }
     h->entry[i].hash = hash;
     h->entry[i].val  = val;
     h->len++;
