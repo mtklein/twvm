@@ -175,7 +175,8 @@ defn(load_contiguous) {
 defn(load_gather) {
     float const   *p = ptr[ip->ptr];
     vector(float) ix = v[ip->x].f;
-    for (int i = 0; i < K; i++) {
+    int const lanes = (end & (K-1)) ? 1 : K;
+    for (int i = 0; i < lanes; i++) {
         v->f[i] = p[(int)ix[i]];
     }
     next;
