@@ -187,7 +187,7 @@ static void test_mutate(void) {
     test(b,want,v0);
 }
 
-static void test_jump(void) {
+static void test_loop(void) {
     struct Builder *b = builder(1);
     {
         int x = load(b,0,thread_id(b));
@@ -197,7 +197,7 @@ static void test_jump(void) {
                              ,fsub(b,x,splat(b,1.0f))
                              ,x);
             mutate(b,&x,newx);
-            jump(b,cond,cond);
+            loop(b,cond);
         }
         store(b,0,x);
     }
@@ -293,7 +293,7 @@ int main(void) {
     test_bxor();
 
     test_mutate();
-    test_jump();
+    test_loop();
 
     test_dead_code();
     test_uniform_load();

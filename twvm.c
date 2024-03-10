@@ -258,8 +258,8 @@ void mutate(struct Builder *b, int *var, int val) {
     b->cse = NULL;
 }
 
-defn(jump) {
-    vector(int) const cond = v[ip->y].i;
+defn(loop) {
+    vector(int) const cond = v[ip->x].i;
 #if __has_builtin(__builtin_reduce_min)
     int const any = __builtin_reduce_min(cond);
 #else
@@ -275,7 +275,7 @@ defn(jump) {
     }
     next;
 }
-void jump(struct Builder *b, int dst, int cond) { push(b, .fn=jump_, .x=dst, .y=cond, .live=1); }
+void loop(struct Builder *b, int cond) { push(b, .fn=loop_, .x=cond, .live=1); }
 
 struct Program {
     int          insts,loop;

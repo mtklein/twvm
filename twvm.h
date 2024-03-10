@@ -25,4 +25,4 @@ int bxor(struct Builder*, int,int);
 int bsel(struct Builder*, int cond, int t, int f);
 
 void mutate(struct Builder*, int* var, int val);
-void jump  (struct Builder*, int dst, int cond);
+void loop  (struct Builder*, int cond);
