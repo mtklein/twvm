@@ -289,16 +289,13 @@ typedef struct Program {
     PInst inst[];
 } Program;
 
-#define  forward(elt,arr) for (__typeof__(arr) elt = arr; elt < arr + arr##s; elt++)
-#define backward(elt,arr) for (__typeof__(arr) elt = arr + arr##s; elt --> arr;)
-
 Program* compile(Builder *b) {
     push(b, .fn=done_, .shape=VARYING, .live=1);
 
     // Dead code elimination: the inputs of live instructions are live, and anything else is dead.
     // Marking dead instructions with fn=NULL handles the phony id=0 instruction naturally.
     int live = 0;
-    backward(inst, b->inst) {
+    for (BInst *inst = b->inst + b->insts; inst --> b->inst;) {
         if (inst->live) {
             b->inst[inst->x].live = 1;
             b->inst[inst->y].live = 1;
@@ -315,7 +312,7 @@ Program* compile(Builder *b) {
         if (varying) {
             p->loop = p->insts;
         }
-        forward(inst, b->inst) {
+        for (BInst *inst = b->inst; inst < b->inst + b->insts; inst++) {
             if (inst->fn && (inst->shape == VARYING) == varying) {
                 inst->id = p->insts++;
                 p->inst[inst->id] = (PInst) {
