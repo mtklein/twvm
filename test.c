@@ -1,7 +1,9 @@
 #include "expect.h"
+#include "stb/stb_image_write.h"
 #include "twvm.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 void internal_tests(void);
 
@@ -296,6 +298,48 @@ static void test_store_uniform(void) {
     test(b, want,uni);
 }
 
+static void write_to_fd(void *ctx, void *buf, int len) {
+    int const *fd = ctx;
+    write(*fd, buf, (size_t)len);
+}
+
+static void demo(void) {
+    struct Builder *b = builder(2);
+    {
+        int I = thread_id(b),
+            x = fadd(b,I,splat(b,0.5f)),
+            y = load(b,1,splat(b,0.0f)),
+         invW = load(b,1,splat(b,1.0f)),
+         invH = load(b,1,splat(b,2.0f));
+
+        int R = fmul(b, x,invW),
+            G = splat(b, 0.5f),
+            B = fmul(b, y,invH);
+
+        store(b,0, fadd(b, fmul(b, splat(b,3.0f), I), splat(b, 0.0f)), R);
+        store(b,0, fadd(b, fmul(b, splat(b,3.0f), I), splat(b, 1.0f)), G);
+        store(b,0, fadd(b, fmul(b, splat(b,3.0f), I), splat(b, 2.0f)), B);
+    }
+    struct Program *p = compile(b);
+
+    int const w = 319,
+              h = 240;
+    float *rgb = calloc(3*w*h, sizeof *rgb);
+
+    for (int y = 0; y < h; y++) {
+        struct {
+            float y, invW, invH;
+        } uni = {(float)y, 1.0f/w, 1.0f/h};
+        execute(p,w, (void*[]){rgb + 3*w*y, &uni});
+    }
+
+    int fd = 1;
+    stbi_write_hdr_to_func(write_to_fd,&fd, w,h,3, rgb);
+
+    free(p);
+    free(rgb);
+}
+
 int main(void) {
     internal_tests();
 
@@ -325,5 +369,7 @@ int main(void) {
     test_gather();
     test_scatter();
     test_store_uniform();
+
+    demo();
     return 0;
 }
