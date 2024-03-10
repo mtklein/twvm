@@ -14,7 +14,6 @@ int fadd(struct Builder*, int,int);
 int fsub(struct Builder*, int,int);
 int fmul(struct Builder*, int,int);
 int fdiv(struct Builder*, int,int);
-int fmad(struct Builder*, int,int,int);
 
 int feq(struct Builder*, int,int);
 int flt(struct Builder*, int,int);

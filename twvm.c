@@ -373,6 +373,20 @@ static void test_dead_code_elimination(void) {
     free(p);
 }
 
+static void test_fmad(void) {
+    struct Builder *b = builder(1);
+    {
+        int x = load(b,0,thread_id(b)),
+            y = fmul(b,x,x),
+            z = fadd(b,y,splat(b,3.0f));
+        store(b,0,z);
+    }
+    Program *p = compile(b);
+    expect(p->insts == 5);
+    expect(p->inst[2].fn == fmad_);
+    free(p);
+}
+
 static void test_loop_hoisting(void) {
     Builder *b = builder(1);
     {
@@ -493,11 +507,11 @@ static void test_load_cse(void) {
     free(compile(b));
 }
 
-
 void internal_tests(void);
 void internal_tests(void) {
     test_constant_prop();
     test_dead_code_elimination();
+    test_fmad();
     test_loop_hoisting();
 
     test_cse();
