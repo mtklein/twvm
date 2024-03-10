@@ -192,6 +192,13 @@ int load(struct Builder *b, int ptr, int ix) {
     return push(b, .fn=load_gather_, .ptr=ptr, .x=ix, .shape=VARYING, .ptr_gen=ptr_gen);
 }
 
+defn(store_uniform) {
+    float *p = ptr[ip->ptr];
+    float const ix = v[ip->x].f[0],
+               val = v[ip->y].f[0];
+    p[(int)ix] = val;
+    next;
+}
 defn(store_contiguous) {
     float *p = ptr[ip->ptr];
     if (end & (K-1)) { __builtin_memcpy(p + end - 1, v+ip->y,   sizeof(float)); }
@@ -210,7 +217,9 @@ void store(struct Builder *b, int ptr, int ix, int val) {
     assert(ptr < b->ptrs);
     b->ptr_gen[ptr]++;
 
-    // TODO: store_uniform when both ix and val are <= UNIFORM?
+    if (b->inst[ix].shape <= UNIFORM && b->inst[val].shape <= UNIFORM) {
+        push(b, .fn=store_uniform_, .ptr=ptr, .x=ix, .y=val, .shape=UNIFORM, .live=1);
+    }
     if (b->inst[ix].fn == thread_id_) {
         push(b, .fn=store_contiguous_, .ptr=ptr, .y=val, .shape=VARYING, .live=1);
         return;
