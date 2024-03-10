@@ -26,3 +26,5 @@ int bsel(struct Builder*, int cond, int t, int f);
 
 void mutate(struct Builder*, int* var, int val);
 void loop  (struct Builder*, int cond);
+
+void store_rgb(struct Builder*, int ptr, int r, int g, int b);

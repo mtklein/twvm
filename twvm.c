@@ -3,6 +3,9 @@
 #include "twvm.h"
 #include <assert.h>
 #include <stdlib.h>
+#if defined(__ARM_NEON)
+    #include <arm_neon.h>
+#endif
 
 #define K 4
 #define vector(T) T __attribute__((vector_size(sizeof(T) * K)))
@@ -228,6 +231,32 @@ void store(struct Builder *b, int ptr, int ix, int val) {
         return;
     }
     push(b, .fn=store_scatter_, .ptr=ptr, .x=ix, .y=val, .shape=VARYING, .live=1);
+}
+
+defn(store_rgb) {
+    int const lanes = (end & (K-1)) ? 1 : K;
+    float *p = (float*)ptr[ip->ptr] + 3*(end - lanes);
+#if 1 && defined(__ARM_NEON) && K == 4
+    vst3q_f32(p, ((float32x4x3_t) {{
+        v[ip->x].f,
+        v[ip->y].f,
+        v[ip->z].f,
+    }}));
+#else
+    float const *R = (float const*)&v[ip->x].f,
+                *G = (float const*)&v[ip->y].f,
+                *B = (float const*)&v[ip->z].f;
+    for (int i = 0; i < lanes; i++) {
+        *p++ = *R++;
+        *p++ = *G++;
+        *p++ = *B++;
+    }
+#endif
+    next;
+}
+void store_rgb(struct Builder *b, int ptr, int R, int G, int B) {
+    b->ptr_gen[ptr]++;
+    push(b, .fn=store_rgb_, .ptr=ptr, .x=R, .y=G, .z=B, .shape=VARYING, .live=1);
 }
 
 #pragma GCC diagnostic push
