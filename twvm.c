@@ -198,15 +198,24 @@ defn(store_contiguous) {
     else             { __builtin_memcpy(p + end - K, v+ip->y, K*sizeof(float)); }
     next;
 }
+defn(store_scatter) {
+    float *p = ptr[ip->ptr];
+    vector(float) ix = v[ip->x].f;
+    for (int i = 0; i < K; i++) {
+        p[(int)ix[i]] = v[ip->y].f[i];
+    }
+    next;
+}
 void store(struct Builder *b, int ptr, int ix, int val) {
     assert(ptr < b->ptrs);
-
-    // TODO: scatter as general case, maybe store_uniform when ix and val are both <= uniform?
-    assert(b->inst[ix].fn == thread_id_);
-    (void)ix;
-
-    push(b, .fn=store_contiguous_, .ptr=ptr, .y=val, .shape=VARYING, .live=1);
     b->ptr_gen[ptr]++;
+
+    // TODO: store_uniform when both ix and val are <= UNIFORM?
+    if (b->inst[ix].fn == thread_id_) {
+        push(b, .fn=store_contiguous_, .ptr=ptr, .y=val, .shape=VARYING, .live=1);
+        return;
+    }
+    push(b, .fn=store_scatter_, .ptr=ptr, .x=ix, .y=val, .shape=VARYING, .live=1);
 }
 
 #pragma GCC diagnostic push

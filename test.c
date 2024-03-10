@@ -273,6 +273,18 @@ static void test_gather(void) {
     test(b,want,v0,v1);
 }
 
+static void test_scatter(void) {
+    struct Builder *b = builder(2);
+    {
+        int ix = load(b,1,thread_id(b));
+        store(b,0, ix,ix);
+    }
+    float ix[] = {2,1,4,8,6,7,5,3,0,9},
+         got[] = {0,0,0,0,0,0,0,0,0,0},
+        want[] = {0,1,2,3,4,5,6,7,8,9};
+    test(b, want,got,ix);
+}
+
 int main(void) {
     internal_tests();
 
@@ -300,5 +312,6 @@ int main(void) {
     test_thread_id();
     test_complex_uniforms();
     test_gather();
+    test_scatter();
     return 0;
 }
